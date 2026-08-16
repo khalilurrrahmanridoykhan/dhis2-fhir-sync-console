@@ -24,14 +24,16 @@ This is a **separate repo** from `onehealth-platform` (where the CLI bridge live
 
 Both the CLI and the first draft of this plan only ever ask "have I synced this FHIR resource id before" -- once true, forever skipped. FHIR resources carry `meta.versionId`/`meta.lastUpdated`, which change on every edit. As originally scoped, a clinician correcting a mis-entered immunization on the FHIR side would never be reflected in DHIS2. Fixed here with an additive `fhirImmunizationBridge/syncedVersions` dataStore key (App-owned, doesn't touch the CLI's own `syncedIds` blob) tracking `{ fhirId: { versionId, dhis2EventId } }` -- a changed version triggers a Tracker **update** of the existing event, not a duplicate create. See `src/lib/classifySync.ts`.
 
-## What's genuinely unverified -- read before relying on this in production
+## Live-verified against a real DHIS2 instance, not just the docs
 
-No account with Route authority was available during development (the shared `play.im.dhis2.org` demo admin got a real, live 403 trying to create one). Two real things are built from DHIS2's own documented API contracts but **not yet confirmed end-to-end against a live instance**:
+No account with Route authority was available for the first pass of development (the shared `play.im.dhis2.org` demo admin got a real, live 403 trying to create one). Everything below was then run for real against a live DHIS2 2.42.5 instance with genuine `ALL` authority:
 
-1. **Route creation + FHIR pagination through it** (`src/hooks/useFhirRoute.ts`, `src/lib/fhirRouteFetch.ts`).
-2. **The exact Tracker `importStrategy` mechanics for updating an existing event** via the modern `/api/tracker` endpoint (`src/lib/dhis2ProvisioningIO.ts`'s `submitUpdateEvent`) -- confirmed this is *not* the older `PUT /api/events/{id}` API, but the precise update payload/strategy value needs a real round-trip test.
+1. **Route creation** -- `POST /api/routes` with this console's exact payload shape (`src/hooks/useFhirRoute.ts`) returned a real `201 Created`, no changes needed.
+2. **FHIR pagination through the Route** -- confirmed page 1 (`GET /api/routes/{id}/run/Immunization?_count=5`) returns a real FHIR Bundle, including real `meta.versionId`/`meta.lastUpdated` values (confirming the version-aware re-sync design above has real data to work with). **Caught and fixed a genuine bug in the process**: HAPI's own "next" link for page 2+ has no resource-type path segment at all (`https://hapi.fhir.org/baseR4?_getpages=...`, not `.../baseR4/Immunization?...`). The original pagination code treated the resulting empty sub-path as "no more pages" and silently stopped after page 1. Fixed in `src/lib/fhirRouteFetch.ts` to track "is there a next page" via the `next` link's presence, not sub-path truthiness -- confirmed live that `GET /api/routes/{id}/run?_getpages=...` (no sub-path, just query params) correctly proxies and returns page 2. A regression test (`src/lib/fhirRouteFetch.test.ts`) reproduces the exact real response shape that caused this.
+3. **Tracker event creation** -- `buildEventPayload`'s exact shape, POSTed to `/api/tracker?async=false`, created a real event; `extractCreatedEventId`'s response path (`bundleReport.typeReportMap.EVENT.objectReports[0].uid`) matched exactly.
+4. **Tracker event update mechanics** -- the previously-unconfirmed part: including the existing event's UID in the payload and posting to `/api/tracker?async=false&importStrategy=UPDATE` (`src/lib/dhis2ProvisioningIO.ts`'s `submitUpdateEvent`) returned `stats.updated: 1`, and reading the event back afterward confirmed the data values actually changed, on the *same* event UID -- a real update, not a duplicate create. No code changes needed here.
 
-**Do this before production use**: run both against a real DHIS2 instance where you hold Route authority, per the "Verification" section below.
+All test metadata (the Route, a test Program/ProgramStage/DataElements, a test Event) was created with clearly-labeled "TEST"/"verification" names. The Route and the test Event were cleanly deleted afterward. The test Program and its 4 DataElements could not be fully removed -- DHIS2 soft-deletes Tracker events rather than hard-deleting them immediately (a real, standard DHIS2 safety behavior, kept for audit trail until a maintenance purge), which blocks cascade-deleting their parent metadata until that purge runs. They remain on that instance, clearly named and inert, until a "remove soft deleted data" maintenance job clears the way for full deletion.
 
 ## Everything else, reused/verified DHIS2 mechanics
 
@@ -56,15 +58,16 @@ yarn test
 ## Verification performed
 
 - `npx tsc --noEmit` -- clean.
-- Full test suite (`d2-app-scripts test`) -- 19 tests, covering the duplicated pure functions (extended with version-aware coverage) and the new classification logic (`src/lib/classifySync.ts`), hand-built fixtures.
+- Full test suite (`d2-app-scripts test`) -- 22 tests, covering the duplicated pure functions (extended with version-aware coverage), the classification logic (`src/lib/classifySync.ts`), and a regression test for the real pagination bug found live, all hand-built fixtures.
 - A real production build (`d2-app-scripts build`) -- succeeds, real icon confirmed in the generated manifest.
+- Live, end-to-end, against a real DHIS2 2.42.5 instance: Route creation, FHIR pagination through a Route (including the bug fix above), Tracker event create, and Tracker event update -- see "Live-verified against a real DHIS2 instance" above.
 
 ## Not yet done -- real, not deferred quietly
 
-- Live end-to-end test of Route creation, FHIR pagination through a Route, and the Tracker update mechanics (see "What's genuinely unverified" above) -- needs an instance with Route authority.
 - The CLI bridge doesn't write to `syncedVersions` or `runHistory` -- only this console does. A real v1.1.
 - Settings aren't shared with the CLI (which still reads environment variables).
 - Cross-link to Data Quality Auditor, and support for FHIR resource types beyond `Immunization` -- real, bigger future directions, not attempted here.
+- The full Preview → Confirm → Sync → History UI flow was verified via `tsc`/tests/build, not yet click-tested inside a real DHIS2 app shell in a browser -- worth doing once you install this on your own instance.
 
 ## License
 

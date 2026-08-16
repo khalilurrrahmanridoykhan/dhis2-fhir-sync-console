@@ -1,13 +1,21 @@
 // Mirrors the original bridge's fhirClient.ts pagination LOGIC (follow the
 // FHIR Bundle's own "next" link) but the request mechanism is completely
 // different: every call goes through this DHIS2 instance's own
-// /api/routes/{id}/run/{subPath}, never fetch() straight to the FHIR
+// /api/routes/{id}/run(/{subPath}), never fetch() straight to the FHIR
 // server. See README for why (the March 2026 App Hub guideline on external
 // credentials).
 //
-// UNVERIFIED LIVE (see README): confirm end-to-end against a real instance
-// with a real Route before trusting this in production -- the only account
-// available during development lacked Route authority.
+// CONFIRMED LIVE against a real DHIS2 2.42.5 instance (dhis2.krrkhan.com)
+// with a real Route to https://hapi.fhir.org/baseR4/**. One real bug this
+// caught: HAPI's own "next" link for page 2+ is the bare base URL with no
+// resource-type segment at all (e.g. "https://hapi.fhir.org/baseR4?_getpages=...",
+// not ".../baseR4/Immunization?..."). Stripping the base path off that
+// leaves an EMPTY string, not null -- an earlier version of this function
+// treated empty-string as "no next page" and silently stopped pagination
+// after page 1. Fixed by tracking "is there a next page" via the presence
+// of the `next` link itself, not by testing subPath's truthiness -- an
+// empty subPath is real and means "call /run with no sub-path, params only",
+// confirmed to work via a live GET /api/routes/{id}/run?_getpages=...
 
 import type { useDataEngine } from '@dhis2/app-runtime'
 import type { FhirBundle, FhirImmunization } from '../reused/types'
@@ -32,17 +40,22 @@ export interface FetchViaRouteOptions {
   maxPages: number
 }
 
+function routeRunResource(routeId: string, subPath: string): string {
+  return subPath ? `routes/${routeId}/run/${subPath}` : `routes/${routeId}/run`
+}
+
 export async function fetchImmunizationsViaRoute(engine: DataEngine, options: FetchViaRouteOptions): Promise<FhirImmunization[]> {
   const resources: FhirImmunization[] = []
   const basePath = new URL(options.fhirBaseUrl).pathname.replace(/\/+$/, '')
 
-  let subPath: string | null = 'Immunization'
+  let subPath = 'Immunization'
   let params: Record<string, string> | undefined = { _count: String(options.pageCount) }
+  let hasNext = true
   let pages = 0
 
-  while (subPath && pages < options.maxPages) {
+  while (hasNext && pages < options.maxPages) {
     const response = (await engine.query({
-      result: { resource: `routes/${options.routeId}/run/${subPath}`, params },
+      result: { resource: routeRunResource(options.routeId, subPath), params },
     })) as unknown as RunRouteResponse
 
     for (const entry of response.result.entry ?? []) {
@@ -50,12 +63,15 @@ export async function fetchImmunizationsViaRoute(engine: DataEngine, options: Fe
     }
 
     const next = (response.result.link ?? []).find((l) => l.relation === 'next')
-    if (!next) break
+    if (!next) {
+      hasNext = false
+      break
+    }
 
     const nextUrl = new URL(next.url)
     let path = nextUrl.pathname
     if (basePath && path.startsWith(basePath)) path = path.slice(basePath.length)
-    subPath = path.replace(/^\/+/, '') || null
+    subPath = path.replace(/^\/+/, '') // may legitimately be '' -- see header comment
     params = Object.fromEntries(nextUrl.searchParams)
     pages++
   }
