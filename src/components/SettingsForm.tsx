@@ -13,6 +13,7 @@ import { useState } from 'react'
 import type { CreateRouteInput, UseFhirRouteResult } from '../hooks/useFhirRoute'
 import type { CurrentUserAuthorities } from '../hooks/useCurrentUserAuthorities'
 import type { FhirAuthType, SettingsBlob } from '../lib/dataStore'
+import { isInRange } from '../lib/validation'
 
 const orgUnitRootsQuery = {
   roots: { resource: 'organisationUnits', params: { filter: 'level:eq:1', fields: 'id', paging: 'false' } },
@@ -65,8 +66,8 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
 
   const selectedRoute = fhirRoute.wildcardRoutes.find((r) => r.id === draft.routeId) ?? null
 
-  const pageCountValid = draft.pageCount >= PAGE_COUNT_RANGE.min && draft.pageCount <= PAGE_COUNT_RANGE.max
-  const maxPagesValid = draft.maxPages >= MAX_PAGES_RANGE.min && draft.maxPages <= MAX_PAGES_RANGE.max
+  const pageCountValid = isInRange(draft.pageCount, PAGE_COUNT_RANGE)
+  const maxPagesValid = isInRange(draft.maxPages, MAX_PAGES_RANGE)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
