@@ -13,6 +13,9 @@
   },
   "homepage": "https://github.com/khalilurrrahmanridoykhan/dhis2-fhir-sync-console#readme",
   "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "d2-app-scripts build",
     "start": "d2-app-scripts start",
