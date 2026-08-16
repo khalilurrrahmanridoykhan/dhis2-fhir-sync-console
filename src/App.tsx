@@ -1,4 +1,5 @@
 import { CircularLoader, HeaderBar } from '@dhis2/ui'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { PreviewPanel } from './components/PreviewPanel'
 import { RunErrorsPanel } from './components/RunErrorsPanel'
 import { RunHistoryTable } from './components/RunHistoryTable'
@@ -14,6 +15,14 @@ import { useSettings } from './hooks/useSettings'
 import { useSyncedIds } from './hooks/useSyncedIds'
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  )
+}
+
+function AppContent() {
   const isStandalone = useIsStandalone()
   const authorities = useCurrentUserAuthorities()
   const { settings, loading: settingsLoading, saveSettings } = useSettings()
