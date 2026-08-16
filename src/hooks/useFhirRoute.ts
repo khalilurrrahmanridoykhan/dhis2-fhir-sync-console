@@ -2,12 +2,19 @@
 // admin pick one -- set up via the official Route Manager app, or by this
 // hook's own "create one for me" fallback below.
 //
-// UNVERIFIED LIVE (see README/plan): the exact `auth` sub-object shape for
-// POST /api/routes hasn't been confirmed end-to-end against a real instance
-// with Route authority (the only account available during development
-// lacked it -- a real 403, not a guess). Built from DHIS2's own documented
-// Route API; confirm the auth payload shape and a full round-trip before
-// treating "create one for me" as production-ready.
+// CONFIRMED LIVE: POST /api/routes with this exact payload shape works.
+// One real bug this caught: a newly-created Route defaults to fully
+// PRIVATE sharing (`"public": "--------"`) -- confirmed live by creating a
+// route as one user and then logging in as a second, properly-authorized
+// user, who saw "No routes found" because they simply couldn't see it. For
+// an app whose whole premise is a shared team control panel, one admin's
+// route being invisible to everyone else defeats the point. Fixed by
+// granting public read access right after creation, the same
+// sharing-endpoint pattern already confirmed working for the Program (see
+// dhis2ProvisioningIO.ts). Read-only, not read-write: a Route's `auth`
+// config (credentials) is a write-only property DHIS2 never returns from a
+// GET regardless of permissions, so granting read access doesn't expose
+// secrets -- it only lets other users see the route exists and use it.
 
 import { useDataEngine } from '@dhis2/app-runtime'
 import { useCallback, useEffect, useState } from 'react'
@@ -26,6 +33,13 @@ interface RoutesListResponse {
 
 interface CreateRouteResponse {
   response: { uid: string }
+}
+
+// Read-only public access -- see header comment for why this is safe
+// (a Route's auth config is never returned from a GET, regardless of who's
+// asking) and why it's necessary (routes default to fully private).
+const ROUTE_SHARING_PAYLOAD = {
+  object: { publicAccess: 'r-------', userGroupAccesses: [], userAccesses: [] },
 }
 
 export interface CreateRouteInput {
@@ -97,8 +111,14 @@ export function useFhirRoute(): UseFhirRouteResult {
         type: 'create',
         data: payload,
       })) as unknown as CreateRouteResponse
+      const routeId = response.response.uid
+      await engine.mutate({
+        resource: `sharing?type=route&id=${routeId}`,
+        type: 'create',
+        data: ROUTE_SHARING_PAYLOAD,
+      })
       await refresh()
-      return response.response.uid
+      return routeId
     },
     [engine, refresh],
   )
