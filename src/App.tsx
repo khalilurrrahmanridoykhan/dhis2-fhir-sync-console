@@ -71,7 +71,7 @@ function AppContent() {
         {ready && (
           <>
             <section style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-              <SyncedCountCard syncedIds={syncedIds} />
+              <SyncedCountCard syncedIds={syncedIds} runHistory={runHistory} />
               <div style={{ flex: 1 }}>
                 <h2>Sync</h2>
                 <PreviewPanel runSync={runSync} buildOptions={buildOptions} onConfirmed={() => runHistory.refresh()} />
