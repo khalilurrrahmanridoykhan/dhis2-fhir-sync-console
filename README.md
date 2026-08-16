@@ -65,7 +65,7 @@ yarn test
 ## Verification performed
 
 - `npx tsc --noEmit` -- clean.
-- Full test suite (`d2-app-scripts test`) -- 22 tests, covering the duplicated pure functions (extended with version-aware coverage), the classification logic (`src/lib/classifySync.ts`), and a regression test for the real pagination bug found live, all hand-built fixtures.
+- Full test suite (`d2-app-scripts test`) -- 25 tests, covering the duplicated pure functions (extended with version-aware coverage), the classification logic (`src/lib/classifySync.ts`), the settings-range validation (`src/lib/validation.ts`), and a regression test for the real pagination bug found live, all hand-built fixtures.
 - A real production build (`d2-app-scripts build`) -- succeeds, real icon confirmed in the generated manifest.
 - Live, end-to-end, against a real DHIS2 2.42.5 instance: Route creation, FHIR pagination through a Route (including the bug fix above), Tracker event create, and Tracker event update -- see "Live-verified against a real DHIS2 instance" above.
 
