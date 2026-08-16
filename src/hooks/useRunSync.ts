@@ -54,7 +54,7 @@ export function useRunSync(): UseRunSyncResult {
     async (options: RunSyncOptions): Promise<SyncRunResult> => {
       setRunning(true)
       try {
-        const resources = await fetchImmunizationsViaRoute(engine, {
+        const resources = await fetchImmunizationsViaRoute({
           routeId: options.routeId,
           fhirBaseUrl: options.fhirBaseUrl,
           pageCount: options.pageCount,
