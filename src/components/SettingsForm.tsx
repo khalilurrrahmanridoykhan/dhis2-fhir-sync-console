@@ -21,6 +21,9 @@ const userGroupsQuery = {
   groups: { resource: 'userGroups', params: { fields: 'id,displayName', paging: 'false' } },
 }
 
+const PAGE_COUNT_RANGE = { min: 1, max: 200 }
+const MAX_PAGES_RANGE = { min: 1, max: 1000 }
+
 interface OrgUnitRootsResponse {
   roots: { organisationUnits: { id: string }[] }
 }
@@ -61,6 +64,9 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
   }
 
   const selectedRoute = fhirRoute.wildcardRoutes.find((r) => r.id === draft.routeId) ?? null
+
+  const pageCountValid = draft.pageCount >= PAGE_COUNT_RANGE.min && draft.pageCount <= PAGE_COUNT_RANGE.max
+  const maxPagesValid = draft.maxPages >= MAX_PAGES_RANGE.min && draft.maxPages <= MAX_PAGES_RANGE.max
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
@@ -123,6 +129,8 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
           type="number"
           value={String(draft.pageCount)}
           onChange={({ value }) => setDraft((prev) => ({ ...prev, pageCount: Number(value ?? prev.pageCount) }))}
+          error={!pageCountValid}
+          validationText={pageCountValid ? undefined : `Must be between ${PAGE_COUNT_RANGE.min} and ${PAGE_COUNT_RANGE.max}.`}
           helpText="Resources fetched per page from the FHIR server."
         />
         <InputField
@@ -130,6 +138,8 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
           type="number"
           value={String(draft.maxPages)}
           onChange={({ value }) => setDraft((prev) => ({ ...prev, maxPages: Number(value ?? prev.maxPages) }))}
+          error={!maxPagesValid}
+          validationText={maxPagesValid ? undefined : `Must be between ${MAX_PAGES_RANGE.min} and ${MAX_PAGES_RANGE.max}.`}
           helpText="Upper bound on pages followed per run, so a huge result set can't run away."
         />
       </section>
@@ -152,7 +162,12 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
         )}
       </section>
 
-      <Button primary onClick={handleSave} loading={saving} disabled={!draft.routeId || !draft.orgUnitId}>
+      <Button
+        primary
+        onClick={handleSave}
+        loading={saving}
+        disabled={!draft.routeId || !draft.orgUnitId || !pageCountValid || !maxPagesValid}
+      >
         Save settings
       </Button>
     </div>
