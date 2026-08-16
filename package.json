@@ -1,0 +1,31 @@
+{
+  "name": "dhis2-fhir-sync-console",
+  "version": "1.0.0",
+  "description": "A DHIS2 App control panel for the FHIR Immunization Bridge -- configure a FHIR connection via a DHIS2 Route, preview and trigger a sync, see run history and per-resource errors, all from inside DHIS2.",
+  "license": "MIT",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "build": "d2-app-scripts build",
+    "start": "d2-app-scripts start",
+    "test": "d2-app-scripts test",
+    "deploy": "d2-app-scripts deploy"
+  },
+  "dependencies": {
+    "@dhis2/app-runtime": "^3.17.3",
+    "@dhis2/ui": "^10.5.0",
+    "prop-types": "^15.8.1",
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@dhis2/cli-app-scripts": "^12.11.0-alpha.1",
+    "@dhis2/d2-i18n": "^1.2.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@types/jest": "^29.5.12",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^7.0.2"
+  }
+}
