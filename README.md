@@ -35,6 +35,13 @@ No account with Route authority was available for the first pass of development 
 
 All test metadata (the Route, a test Program/ProgramStage/DataElements, a test Event) was created with clearly-labeled "TEST"/"verification" names. The Route and the test Event were cleanly deleted afterward. The test Program and its 4 DataElements could not be fully removed -- DHIS2 soft-deletes Tracker events rather than hard-deleting them immediately (a real, standard DHIS2 safety behavior, kept for audit trail until a maintenance purge), which blocks cascade-deleting their parent metadata until that purge runs. They remain on that instance, clearly named and inert, until a "remove soft deleted data" maintenance job clears the way for full deletion.
 
+## Deploying: two real gotchas found by actually doing it
+
+Deploying with `d2-app-scripts deploy` and then opening the app in a real browser (not just checking the build/deploy commands exit cleanly) surfaced two things worth knowing if you're deploying this yourself:
+
+1. **Redeploying under an unchanged `version` can serve stale files.** DHIS2 stores each app under a version-named folder (`apps/{key}-{version}`) and appears to cache which folder is "current." Deploying twice with the same `version` in `package.json` re-uploaded new files to disk, but the instance kept serving the *old* `index.html` (old JS bundle hash, old page title) until the app was deleted (`DELETE /api/apps/{key}`) and redeployed under a bumped version. If a redeploy doesn't seem to take effect, bump the version rather than assuming the deploy itself failed.
+2. **A small, non-resizing iframe height is normal, not a bug.** The DHIS2 Global Shell renders each app inside an iframe that started at a fixed 150px height in testing and didn't grow to fit content in an automated headless check. Confirmed this is universal Global Shell behavior, not specific to this app, by checking an already-working sibling app (Data Quality Auditor) under the same instance and getting the identical fixed height. If you're scripting a browser check against this app (or any DHIS2 app) and it looks like content never rendered, read the *inner* app iframe's own DOM directly (`/api/apps/{key}/index.html`), not the outer Global Shell wrapper -- the outer wrapper's own chrome (header, nav) renders fine long before you can tell whether the inner app did.
+
 ## Everything else, reused/verified DHIS2 mechanics
 
 Program/data element provisioning payload shapes (`src/reused/provisioning.ts`) are unchanged from the original bridge, confirmed live against `play.dhis2.org` (stable-2-43-1) in that project: a Program's `programStages` can't be nested in the creation POST, and sharing uses the `r-rw----` access string. The `dataStore` read-modify-write pattern (`src/lib/dataStore.ts`, every hook in `src/hooks/`) matches every sibling DHIS2 app in this developer's portfolio exactly. `POST /api/messageConversations` for error notifications is a real, documented DHIS2 endpoint.
@@ -67,7 +74,7 @@ yarn test
 - The CLI bridge doesn't write to `syncedVersions` or `runHistory` -- only this console does. A real v1.1.
 - Settings aren't shared with the CLI (which still reads environment variables).
 - Cross-link to Data Quality Auditor, and support for FHIR resource types beyond `Immunization` -- real, bigger future directions, not attempted here.
-- The full Preview → Confirm → Sync → History UI flow was verified via `tsc`/tests/build, not yet click-tested inside a real DHIS2 app shell in a browser -- worth doing once you install this on your own instance.
+- The full Preview → Confirm → Sync → History UI flow was verified via `tsc`/tests/build, and confirmed rendering correctly (real Settings form, Route picker, org unit picker) inside a real DHIS2 Global Shell on a live instance -- a full click-through of an actual sync run (not just that the UI renders) is still worth doing on your own data.
 
 ## License
 
