@@ -5,7 +5,12 @@ import type { RunSyncOptions, SyncRunResult, UseRunSyncResult } from '../hooks/u
 interface Props {
   runSync: UseRunSyncResult
   buildOptions: () => RunSyncOptions | null
-  onConfirmed: () => void
+  /** Called after a real (non-preview) run completes -- lets App.tsx refresh
+   * its own separate useSyncedIds()/useRunHistory() hook instances, which
+   * don't otherwise learn that useRunSync() (a different instance of those
+   * same hooks) just wrote new data. See the identical note on
+   * RunSyncButton's onSyncComplete for how this was actually found. */
+  onSyncComplete: () => void
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -14,7 +19,7 @@ const KIND_LABEL: Record<string, string> = {
   unchanged: 'Unchanged',
 }
 
-export function PreviewPanel({ runSync, buildOptions, onConfirmed }: Props) {
+export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
   const [preview, setPreview] = useState<SyncRunResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -40,7 +45,7 @@ export function PreviewPanel({ runSync, buildOptions, onConfirmed }: Props) {
     try {
       await runSync.run({ ...options, preview: false })
       setPreview(null)
-      onConfirmed()
+      onSyncComplete()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

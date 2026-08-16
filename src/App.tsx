@@ -31,6 +31,15 @@ function AppContent() {
   const runHistory = useRunHistory()
   const runSync = useRunSync()
 
+  // useRunSync() keeps its own separate useSyncedIds()/useRunHistory()
+  // instances internally -- after a real run, THIS handler is what tells
+  // the display-only instances here to catch up. See the header comments on
+  // RunSyncButton/PreviewPanel's onSyncComplete for how this gap was found.
+  function handleSyncComplete() {
+    runHistory.refresh()
+    syncedIds.refresh()
+  }
+
   function buildOptions(): RunSyncOptions | null {
     if (!settings.routeId || !settings.orgUnitId) return null
     const route = fhirRoute.wildcardRoutes.find((r) => r.id === settings.routeId)
@@ -74,9 +83,9 @@ function AppContent() {
               <SyncedCountCard syncedIds={syncedIds} runHistory={runHistory} />
               <div style={{ flex: 1 }}>
                 <h2>Sync</h2>
-                <PreviewPanel runSync={runSync} buildOptions={buildOptions} onConfirmed={() => runHistory.refresh()} />
+                <PreviewPanel runSync={runSync} buildOptions={buildOptions} onSyncComplete={handleSyncComplete} />
                 <div style={{ marginTop: 16 }}>
-                  <RunSyncButton runSync={runSync} buildOptions={buildOptions} />
+                  <RunSyncButton runSync={runSync} buildOptions={buildOptions} onSyncComplete={handleSyncComplete} />
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <RunErrorsPanel runSync={runSync} />
