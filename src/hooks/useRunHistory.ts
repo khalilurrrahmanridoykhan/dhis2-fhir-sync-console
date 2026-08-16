@@ -30,6 +30,7 @@ const MAX_RETAINED_RUNS = 50
 export interface UseRunHistoryResult extends State {
   refresh: () => Promise<void>
   appendRun: (entry: RunHistoryEntry) => Promise<void>
+  clear: () => Promise<void>
 }
 
 export function useRunHistory(): UseRunHistoryResult {
@@ -74,5 +75,16 @@ export function useRunHistory(): UseRunHistoryResult {
     [engine, keyExists, state.runs],
   )
 
-  return { ...state, refresh: load, appendRun }
+  const clear = useCallback(async () => {
+    const blob: RunHistoryBlob = { schemaVersion: CURRENT_SCHEMA_VERSION, runs: [] }
+    if (keyExists) {
+      await engine.mutate({ resource: BRIDGE_RESOURCE, id: RUN_HISTORY_KEY, type: 'update', data: blob })
+    } else {
+      await engine.mutate({ resource: `${BRIDGE_RESOURCE}/${RUN_HISTORY_KEY}`, type: 'create', data: blob })
+      setKeyExists(true)
+    }
+    setState({ loading: false, error: null, runs: [] })
+  }, [engine, keyExists])
+
+  return { ...state, refresh: load, appendRun, clear }
 }
