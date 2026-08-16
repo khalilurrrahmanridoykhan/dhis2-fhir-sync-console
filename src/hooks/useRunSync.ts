@@ -10,6 +10,16 @@ import { useSyncedIds } from './useSyncedIds'
 import { useSyncedVersions } from './useSyncedVersions'
 import { useSyncNotifications } from './useSyncNotifications'
 
+// Real gap found live: syncedIds/syncedVersions used to be written only
+// once, after the entire loop finished. A run interrupted partway through
+// (browser closed, network drops, tab navigated away) lost tracking of
+// every event it had already created, so a retry would recreate them as
+// duplicates -- confirmed by literally hitting this during testing (a test
+// script closed the browser mid-run; 69 real events existed with 0 of them
+// recorded as synced). Checkpointing periodically bounds the loss to at
+// most this many items instead of the whole run.
+const CHECKPOINT_INTERVAL = 10
+
 export interface RunSyncOptions {
   routeId: string
   fhirBaseUrl: string
@@ -85,6 +95,7 @@ export function useRunSync(): UseRunSyncResult {
         const updatedVersions = { ...syncedVersions }
         let created = 0
         let updated = 0
+        let sinceCheckpoint = 0
 
         for (const item of classified) {
           if (item.kind === 'new') {
@@ -95,6 +106,7 @@ export function useRunSync(): UseRunSyncResult {
                 updatedVersions[item.visit.fhirImmunizationId] = { versionId: item.visit.versionId, dhis2EventId: eventId }
               }
               created++
+              sinceCheckpoint++
             } catch (error) {
               errors.push({ fhirImmunizationId: item.visit.fhirImmunizationId, message: error instanceof Error ? error.message : String(error) })
             }
@@ -105,6 +117,7 @@ export function useRunSync(): UseRunSyncResult {
                 updatedVersions[item.visit.fhirImmunizationId] = { versionId: item.visit.versionId, dhis2EventId: item.dhis2EventId }
               }
               updated++
+              sinceCheckpoint++
             } catch (error) {
               errors.push({ fhirImmunizationId: item.visit.fhirImmunizationId, message: error instanceof Error ? error.message : String(error) })
             }
@@ -114,8 +127,17 @@ export function useRunSync(): UseRunSyncResult {
           // anything), so updatedVersions is intentionally left untouched
           // for that case -- it'll be populated the next time this
           // resource is actually created or updated.
+
+          if (sinceCheckpoint >= CHECKPOINT_INTERVAL) {
+            await saveIds(updatedSyncedIds)
+            await saveEntries(updatedVersions)
+            sinceCheckpoint = 0
+          }
         }
 
+        // Final flush -- covers whatever's left under CHECKPOINT_INTERVAL,
+        // and is a no-op write (same data) if the loop's last checkpoint
+        // already caught everything.
         await saveIds(updatedSyncedIds)
         await saveEntries(updatedVersions)
 

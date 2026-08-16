@@ -1,6 +1,6 @@
 {
   "name": "dhis2-fhir-sync-console",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A DHIS2 App control panel for the FHIR Immunization Bridge -- configure a FHIR connection via a DHIS2 Route, preview and trigger a sync, see run history and per-resource errors, all from inside DHIS2.",
   "license": "MIT",
   "private": true,
