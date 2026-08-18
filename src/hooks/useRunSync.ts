@@ -58,22 +58,39 @@ export interface SyncRunResult {
 
 export interface UseRunSyncResult {
   running: boolean
+  /** False until this hook's own internal syncedIds/syncedVersions/
+   * runHistory instances have all finished their initial load. Real bug
+   * found live: run() saves via saveIds/saveEntries, which decide
+   * create-vs-update from each hook's own `keyExists` state -- if a sync
+   * started before that state settled, saveIds would try to CREATE a key
+   * that demonstrably already existed (dhis2.krrkhan.com already showed
+   * 88 previously-synced ids), and DHIS2 correctly rejected it: "Key
+   * 'syncedIds' already exists in namespace 'fhirImmunizationBridge'".
+   * Callers (RunSyncButton/PreviewPanel) should disable their buttons
+   * while this is false, and run() itself refuses to start until it's
+   * true, so this can't be hit by clicking too early either way. */
+  ready: boolean
   lastResult: SyncRunResult | null
   run: (options: RunSyncOptions) => Promise<SyncRunResult>
 }
 
 export function useRunSync(): UseRunSyncResult {
   const engine = useDataEngine()
-  const { ids: syncedIds, saveIds } = useSyncedIds()
-  const { entries: syncedVersions, saveEntries } = useSyncedVersions()
-  const { runs: pastRuns, appendRun } = useRunHistory()
+  const { ids: syncedIds, loading: syncedIdsLoading, saveIds } = useSyncedIds()
+  const { entries: syncedVersions, loading: syncedVersionsLoading, saveEntries } = useSyncedVersions()
+  const { runs: pastRuns, loading: pastRunsLoading, appendRun } = useRunHistory()
   const { notifyOnErrors } = useSyncNotifications()
+
+  const ready = !syncedIdsLoading && !syncedVersionsLoading && !pastRunsLoading
 
   const [running, setRunning] = useState(false)
   const [lastResult, setLastResult] = useState<SyncRunResult | null>(null)
 
   const run = useCallback(
     async (options: RunSyncOptions): Promise<SyncRunResult> => {
+      if (!ready) {
+        throw new Error('Still loading synced-id/version history -- wait a moment and try again.')
+      }
       setRunning(true)
       try {
         // Captured before the fetch, not after the run completes -- used
@@ -199,8 +216,8 @@ export function useRunSync(): UseRunSyncResult {
         setRunning(false)
       }
     },
-    [engine, syncedIds, syncedVersions, pastRuns, saveIds, saveEntries, appendRun, notifyOnErrors],
+    [engine, ready, syncedIds, syncedVersions, pastRuns, saveIds, saveEntries, appendRun, notifyOnErrors],
   )
 
-  return { running, lastResult, run }
+  return { running, ready, lastResult, run }
 }

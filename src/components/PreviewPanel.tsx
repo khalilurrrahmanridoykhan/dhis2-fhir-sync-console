@@ -69,7 +69,7 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
         </NoticeBox>
       )}
 
-      <Button onClick={handlePreview} loading={runSync.running && !preview}>
+      <Button onClick={handlePreview} loading={runSync.running && !preview} disabled={!runSync.ready}>
         {i18n.t('Preview sync')}
       </Button>
 

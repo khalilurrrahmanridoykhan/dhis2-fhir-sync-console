@@ -46,7 +46,7 @@ export function RunSyncButton({ runSync, buildOptions, onSyncComplete }: Props) 
           {error}
         </NoticeBox>
       )}
-      <Button onClick={handleRun} loading={runSync.running}>
+      <Button onClick={handleRun} loading={runSync.running} disabled={!runSync.ready}>
         {i18n.t('Sync now')}
       </Button>
 
