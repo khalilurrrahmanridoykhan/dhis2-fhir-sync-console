@@ -12,7 +12,7 @@ import {
 import { useState } from 'react'
 import type { CreateRouteInput, UseFhirRouteResult } from '../hooks/useFhirRoute'
 import type { CurrentUserAuthorities } from '../hooks/useCurrentUserAuthorities'
-import i18n from '../locales'
+import i18n from '../i18n'
 import type { FhirAuthType, SettingsBlob } from '../lib/dataStore'
 import { isInRange } from '../lib/validation'
 

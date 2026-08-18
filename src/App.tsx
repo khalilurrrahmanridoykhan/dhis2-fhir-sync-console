@@ -12,7 +12,7 @@ import { useRunHistory } from './hooks/useRunHistory'
 import { useRunSync, type RunSyncOptions } from './hooks/useRunSync'
 import { useSettings } from './hooks/useSettings'
 import { useSyncedIds } from './hooks/useSyncedIds'
-import i18n from './locales'
+import i18n from './i18n'
 
 export default function App() {
   return (

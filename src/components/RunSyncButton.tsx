@@ -1,6 +1,6 @@
 import { Button, NoticeBox } from '@dhis2/ui'
 import { useState } from 'react'
-import i18n from '../locales'
+import i18n from '../i18n'
 import type { RunSyncOptions, UseRunSyncResult } from '../hooks/useRunSync'
 
 interface Props {

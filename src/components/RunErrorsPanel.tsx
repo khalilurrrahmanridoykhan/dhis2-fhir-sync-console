@@ -1,5 +1,5 @@
 import { NoticeBox } from '@dhis2/ui'
-import i18n from '../locales'
+import i18n from '../i18n'
 import type { UseRunSyncResult } from '../hooks/useRunSync'
 
 interface Props {

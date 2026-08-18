@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { NoticeBox } from '@dhis2/ui'
-import i18n from '../locales'
+import i18n from '../i18n'
 
 interface Props {
   children: ReactNode

@@ -1,5 +1,5 @@
 import { CircularLoader } from '@dhis2/ui'
-import i18n from '../locales'
+import i18n from '../i18n'
 import type { UseSyncedIdsResult } from '../hooks/useSyncedIds'
 import type { UseRunHistoryResult } from '../hooks/useRunHistory'
 
