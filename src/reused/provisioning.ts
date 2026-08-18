@@ -123,7 +123,12 @@ export function buildUpdateEventPayload(provisioned: ProvisionedProgram, orgUnit
 
 export interface TrackerImportResponse {
   status: 'OK' | 'ERROR' | 'WARNING'
-  validationReport?: { errorReports?: { message: string }[] }
+  // uid on an error report is present when DHIS2 can attribute the error to
+  // a specific submitted object (true for every event here, since every one
+  // -- new or updated -- always carries a UID, client- or server-known; see
+  // buildBatchEventPayload). NEEDS LIVE CONFIRMATION against a real batch
+  // response before this field is trusted -- see the plan's Part D.
+  validationReport?: { errorReports?: { message: string; uid?: string }[] }
   bundleReport?: { typeReportMap?: { EVENT?: { objectReports?: { uid: string }[] } } }
 }
 
@@ -134,4 +139,93 @@ export function extractCreatedEventId(response: TrackerImportResponse): string |
 export function extractTrackerErrorMessage(response: TrackerImportResponse): string | null {
   const messages = response.validationReport?.errorReports?.map((r) => r.message) ?? []
   return messages.length > 0 ? messages.join(' ') : null
+}
+
+// ---- Batch submission (NEW -- not in the original bridge, which submits
+// one event per HTTP call). buildEventPayload/buildUpdateEventPayload above
+// stay untouched for parity with the source-of-truth repo; this app now
+// uses the functions below instead, via dhis2ProvisioningIO.ts's
+// submitEventBatch -- see useRunSync.ts.
+//
+// DHIS2's tracker import accepts many events in one POST. Its DEFAULT
+// strategy (no importStrategy param, same as buildEventPayload's own call
+// site already used) is CREATE_AND_UPDATE: an event whose UID doesn't
+// exist yet is created, one whose UID matches an existing event is
+// updated. New and updated events can therefore be mixed in ONE batch, as
+// long as every event carries a UID up front -- so every 'new' item needs
+// a client-generated UID here, rather than letting the server assign one
+// (server-assigned UIDs are exactly what the old single-event
+// buildEventPayload relied on, which is why batching wasn't possible
+// without this change).
+
+// DHIS2's own client-side UID scheme: 11 characters, first from [A-Za-z],
+// the rest from [A-Za-z0-9]. Not cryptographically random -- matches what
+// DHIS2 web clients generate; a collision would require matching an
+// existing object's UID exactly, astronomically unlikely over this id
+// space for a sync run's event volume.
+const UID_FIRST_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+const UID_CHARS = UID_FIRST_CHARS + '0123456789'
+
+export function generateUid(): string {
+  let uid = UID_FIRST_CHARS[Math.floor(Math.random() * UID_FIRST_CHARS.length)]
+  for (let i = 0; i < 10; i++) {
+    uid += UID_CHARS[Math.floor(Math.random() * UID_CHARS.length)]
+  }
+  return uid
+}
+
+export interface BatchEventItem {
+  // Freshly generated via generateUid() for a 'new' item -- ignored (the
+  // existing id wins) when existingEventId is set.
+  eventId: string
+  existingEventId: string | null
+  visit: MappedVisit
+}
+
+export function buildBatchEventPayload(items: BatchEventItem[], provisioned: ProvisionedProgram, orgUnitId: string) {
+  return {
+    events: items.map((item) => ({
+      event: item.existingEventId ?? item.eventId,
+      program: provisioned.programId,
+      programStage: provisioned.programStageId,
+      orgUnit: orgUnitId,
+      occurredAt: item.visit.occurredAt,
+      status: 'COMPLETED' as const,
+      dataValues: buildDataValues(provisioned, item.visit),
+    })),
+  }
+}
+
+export interface BatchOutcome {
+  succeeded: Set<string> // event UIDs (matches submittedEventIds' values)
+  errors: { eventId: string; message: string }[]
+}
+
+// Cross-references the response against the UIDs actually submitted (not
+// just whatever the response happens to mention), so a UID that comes back
+// as neither a success nor a targeted error is treated as failed with a
+// clear generic message -- never silently assumed to have succeeded.
+export function parseTrackerBatchResult(response: TrackerImportResponse, submittedEventIds: string[]): BatchOutcome {
+  const succeededUids = new Set((response.bundleReport?.typeReportMap?.EVENT?.objectReports ?? []).map((r) => r.uid))
+
+  const messagesByUid = new Map<string, string[]>()
+  for (const report of response.validationReport?.errorReports ?? []) {
+    if (!report.uid) continue
+    const list = messagesByUid.get(report.uid) ?? []
+    list.push(report.message)
+    messagesByUid.set(report.uid, list)
+  }
+
+  const succeeded = new Set<string>()
+  const errors: { eventId: string; message: string }[] = []
+  for (const eventId of submittedEventIds) {
+    if (succeededUids.has(eventId)) {
+      succeeded.add(eventId)
+    } else if (messagesByUid.has(eventId)) {
+      errors.push({ eventId, message: messagesByUid.get(eventId)!.join(' ') })
+    } else {
+      errors.push({ eventId, message: 'DHIS2 did not report a result for this event.' })
+    }
+  }
+  return { succeeded, errors }
 }

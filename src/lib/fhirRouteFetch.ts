@@ -47,6 +47,13 @@ export interface FetchViaRouteOptions {
   fhirBaseUrl: string
   pageCount: number
   maxPages: number
+  /** ISO timestamp of the previous run's own start time, if any. When
+   * present, only resources updated since then are fetched (FHIR's
+   * standard `_lastUpdated=gt...` search param) -- a stable server no
+   * longer gets fully re-walked on every run. Absent on the very first
+   * run (no history yet), which fetches everything, same as before this
+   * option existed. */
+  sinceIso?: string
 }
 
 function routeRunUrl(routeId: string, subPath: string, params: Record<string, string>): string {
@@ -72,7 +79,10 @@ export async function fetchImmunizationsViaRoute(options: FetchViaRouteOptions):
   const basePath = new URL(options.fhirBaseUrl).pathname.replace(/\/+$/, '')
 
   let subPath = 'Immunization'
-  let params: Record<string, string> = { _count: String(options.pageCount) }
+  let params: Record<string, string> = {
+    _count: String(options.pageCount),
+    ...(options.sinceIso ? { _lastUpdated: `gt${options.sinceIso}` } : {}),
+  }
   let hasNext = true
   let pages = 0
 

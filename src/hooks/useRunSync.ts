@@ -1,9 +1,10 @@
 import { useDataEngine } from '@dhis2/app-runtime'
 import { useCallback, useState } from 'react'
 import { classifyVisits, type Classified } from '../lib/classifySync'
-import { findOrCreateProgram, submitCreateEvent, submitUpdateEvent } from '../lib/dhis2ProvisioningIO'
+import { findOrCreateProgram, submitEventBatch } from '../lib/dhis2ProvisioningIO'
 import { fetchImmunizationsViaRoute } from '../lib/fhirRouteFetch'
 import { mapAll } from '../reused/mapping'
+import { generateUid, type BatchEventItem } from '../reused/provisioning'
 import type { SkippedResource } from '../reused/types'
 import { useRunHistory } from './useRunHistory'
 import { useSyncedIds } from './useSyncedIds'
@@ -16,9 +17,20 @@ import { useSyncNotifications } from './useSyncNotifications'
 // every event it had already created, so a retry would recreate them as
 // duplicates -- confirmed by literally hitting this during testing (a test
 // script closed the browser mid-run; 69 real events existed with 0 of them
-// recorded as synced). Checkpointing periodically bounds the loss to at
-// most this many items instead of the whole run.
-const CHECKPOINT_INTERVAL = 10
+// recorded as synced). Checkpointing after every batch (see EVENT_BATCH_SIZE
+// below) bounds the loss to at most one batch instead of the whole run.
+// This checkpoints less often BY ITEM COUNT than the old per-10-items
+// scheme, but the actual time window per checkpoint is shorter: a
+// 50-event batch completes in one HTTP round trip instead of 50 sequential
+// ones, so the wall-clock exposure is smaller even though more items sit
+// inside it.
+const EVENT_BATCH_SIZE = 50
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
+  return chunks
+}
 
 export interface RunSyncOptions {
   routeId: string
@@ -54,7 +66,7 @@ export function useRunSync(): UseRunSyncResult {
   const engine = useDataEngine()
   const { ids: syncedIds, saveIds } = useSyncedIds()
   const { entries: syncedVersions, saveEntries } = useSyncedVersions()
-  const { appendRun } = useRunHistory()
+  const { runs: pastRuns, appendRun } = useRunHistory()
   const { notifyOnErrors } = useSyncNotifications()
 
   const [running, setRunning] = useState(false)
@@ -64,11 +76,25 @@ export function useRunSync(): UseRunSyncResult {
     async (options: RunSyncOptions): Promise<SyncRunResult> => {
       setRunning(true)
       try {
+        // Captured before the fetch, not after the run completes -- used
+        // both as this run's own history timestamp and, on the *next* run,
+        // as the FHIR "_lastUpdated" cursor. Using the completion time
+        // instead would create a real race: a FHIR resource updated while
+        // THIS run was in flight could fall in the gap between "when this
+        // run started reading" and "when it finished writing," and never
+        // get picked up by a cursor based on the later time.
+        const runStartedAt = new Date().toISOString()
+        // Most recent past run's own start time, if any -- undefined on a
+        // brand-new instance (no history yet), which correctly falls back
+        // to fetching everything, same as today's behavior.
+        const sinceIso = pastRuns[0]?.timestamp
+
         const resources = await fetchImmunizationsViaRoute({
           routeId: options.routeId,
           fhirBaseUrl: options.fhirBaseUrl,
           pageCount: options.pageCount,
           maxPages: options.maxPages,
+          sinceIso,
         })
         const { visits, skipped } = mapAll(resources)
         const classified = classifyVisits(visits, syncedIds, syncedVersions)
@@ -95,51 +121,50 @@ export function useRunSync(): UseRunSyncResult {
         const updatedVersions = { ...syncedVersions }
         let created = 0
         let updated = 0
-        let sinceCheckpoint = 0
 
-        for (const item of classified) {
-          if (item.kind === 'new') {
-            try {
-              const eventId = await submitCreateEvent(engine, provisioned, options.orgUnitId, item.visit)
-              updatedSyncedIds.add(item.visit.fhirImmunizationId)
-              if (item.visit.versionId) {
-                updatedVersions[item.visit.fhirImmunizationId] = { versionId: item.visit.versionId, dhis2EventId: eventId }
-              }
-              created++
-              sinceCheckpoint++
-            } catch (error) {
-              errors.push({ fhirImmunizationId: item.visit.fhirImmunizationId, message: error instanceof Error ? error.message : String(error) })
-            }
-          } else if (item.kind === 'updated') {
-            try {
-              await submitUpdateEvent(engine, provisioned, options.orgUnitId, item.dhis2EventId, item.visit)
-              if (item.visit.versionId) {
-                updatedVersions[item.visit.fhirImmunizationId] = { versionId: item.visit.versionId, dhis2EventId: item.dhis2EventId }
-              }
-              updated++
-              sinceCheckpoint++
-            } catch (error) {
-              errors.push({ fhirImmunizationId: item.visit.fhirImmunizationId, message: error instanceof Error ? error.message : String(error) })
-            }
-          }
-          // 'unchanged' -- nothing to write. If versionUnknown, there's
-          // also nothing to *learn* yet (no versionId was compared against
-          // anything), so updatedVersions is intentionally left untouched
-          // for that case -- it'll be populated the next time this
-          // resource is actually created or updated.
+        // Only 'new'/'updated' need a write -- 'unchanged' has nothing to
+        // submit. If versionUnknown, there's also nothing to *learn* yet
+        // (no versionId was compared against anything), so updatedVersions
+        // is intentionally left untouched for that case -- it'll be
+        // populated the next time this resource is actually created or
+        // updated.
+        const writable = classified.filter((item): item is Extract<Classified, { kind: 'new' | 'updated' }> => item.kind !== 'unchanged')
 
-          if (sinceCheckpoint >= CHECKPOINT_INTERVAL) {
-            await saveIds(updatedSyncedIds)
-            await saveEntries(updatedVersions)
-            sinceCheckpoint = 0
+        for (const batch of chunk(writable, EVENT_BATCH_SIZE)) {
+          const items: BatchEventItem[] = batch.map((item) => ({
+            eventId: item.kind === 'new' ? generateUid() : item.dhis2EventId,
+            existingEventId: item.kind === 'updated' ? item.dhis2EventId : null,
+            visit: item.visit,
+          }))
+          // Same order as `items` -- eventId here is always the id that was
+          // actually submitted (existingEventId for an update, the fresh
+          // one for a create), matching what parseTrackerBatchResult keys
+          // its outcome by.
+          const byEventId = new Map(items.map((bi, i) => [bi.existingEventId ?? bi.eventId, batch[i]]))
+
+          const outcome = await submitEventBatch(engine, items, provisioned, options.orgUnitId)
+
+          for (const eventId of outcome.succeeded) {
+            const item = byEventId.get(eventId)
+            if (!item) continue
+            updatedSyncedIds.add(item.visit.fhirImmunizationId)
+            if (item.visit.versionId) {
+              updatedVersions[item.visit.fhirImmunizationId] = { versionId: item.visit.versionId, dhis2EventId: eventId }
+            }
+            if (item.kind === 'new') created++
+            else updated++
           }
+          for (const err of outcome.errors) {
+            const item = byEventId.get(err.eventId)
+            if (item) errors.push({ fhirImmunizationId: item.visit.fhirImmunizationId, message: err.message })
+          }
+
+          // Checkpoint after every batch -- see EVENT_BATCH_SIZE's own
+          // comment for why this is safe despite checkpointing less often
+          // by item count than the old per-10-items scheme.
+          await saveIds(updatedSyncedIds)
+          await saveEntries(updatedVersions)
         }
-
-        // Final flush -- covers whatever's left under CHECKPOINT_INTERVAL,
-        // and is a no-op write (same data) if the loop's last checkpoint
-        // already caught everything.
-        await saveIds(updatedSyncedIds)
-        await saveEntries(updatedVersions)
 
         const result: SyncRunResult = {
           fetched: resources.length,
@@ -152,7 +177,7 @@ export function useRunSync(): UseRunSyncResult {
           classified,
         }
 
-        const timestamp = new Date().toISOString()
+        const timestamp = runStartedAt
         await appendRun({
           timestamp,
           fetched: result.fetched,
@@ -174,7 +199,7 @@ export function useRunSync(): UseRunSyncResult {
         setRunning(false)
       }
     },
-    [engine, syncedIds, syncedVersions, saveIds, saveEntries, appendRun, notifyOnErrors],
+    [engine, syncedIds, syncedVersions, pastRuns, saveIds, saveEntries, appendRun, notifyOnErrors],
   )
 
   return { running, lastResult, run }

@@ -130,6 +130,45 @@ describe('fetchImmunizationsViaRoute', () => {
     expect(resources).toHaveLength(2)
   })
 
+  test('appends _lastUpdated=gt<sinceIso> to the first page when sinceIso is provided', async () => {
+    const calls: string[] = []
+    global.fetch = jest.fn(async (url: string) => {
+      calls.push(url)
+      return jsonResponse({
+        resourceType: 'Bundle',
+        entry: [],
+        link: [{ relation: 'self', url: 'https://hapi.fhir.org/baseR4/Immunization' }],
+      })
+    }) as unknown as typeof fetch
+
+    await fetchImmunizationsViaRoute({
+      routeId: 'r1',
+      fhirBaseUrl: 'https://hapi.fhir.org/baseR4',
+      pageCount: 20,
+      maxPages: 5,
+      sinceIso: '2026-01-01T00:00:00.000Z',
+    })
+
+    expect(calls[0]).toContain(`_lastUpdated=${encodeURIComponent('gt2026-01-01T00:00:00.000Z')}`)
+  })
+
+  test('omits _lastUpdated entirely when sinceIso is not provided (first-ever run, full fetch)', async () => {
+    const calls: string[] = []
+    global.fetch = jest.fn(async (url: string) => {
+      calls.push(url)
+      return jsonResponse({ resourceType: 'Bundle', entry: [], link: [] })
+    }) as unknown as typeof fetch
+
+    await fetchImmunizationsViaRoute({
+      routeId: 'r1',
+      fhirBaseUrl: 'https://hapi.fhir.org/baseR4',
+      pageCount: 20,
+      maxPages: 5,
+    })
+
+    expect(calls[0]).not.toContain('_lastUpdated')
+  })
+
   test('throws a clear error on a non-ok response instead of silently returning nothing', async () => {
     global.fetch = jest.fn(async () => ({
       ok: false,

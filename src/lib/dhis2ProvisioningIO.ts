@@ -9,17 +9,17 @@ import {
   DATA_ELEMENT_DEFS,
   PROGRAM_NAME,
   PROGRAM_SHARING_PAYLOAD,
+  buildBatchEventPayload,
   buildDataElementPayload,
-  buildEventPayload,
   buildProgramPayload,
   buildProgramStagePayload,
-  buildUpdateEventPayload,
-  extractCreatedEventId,
-  extractTrackerErrorMessage,
+  parseTrackerBatchResult,
+  type BatchEventItem,
+  type BatchOutcome,
   type DataElementRole,
   type TrackerImportResponse,
 } from '../reused/provisioning'
-import type { MappedVisit, ProvisionedProgram } from '../reused/types'
+import type { ProvisionedProgram } from '../reused/types'
 
 type DataEngine = ReturnType<typeof useDataEngine>
 
@@ -99,41 +99,26 @@ async function createProgram(engine: DataEngine, orgUnitIds: string[]): Promise<
   return { programId, programStageId, dataElementIds: resolvedDataElementIds }
 }
 
-export async function submitCreateEvent(engine: DataEngine, provisioned: ProvisionedProgram, orgUnitId: string, visit: MappedVisit): Promise<string> {
-  const payload = buildEventPayload(provisioned, orgUnitId, visit)
+// Replaces the old submitCreateEvent/submitUpdateEvent -- one bulk POST for
+// up to a whole batch of new AND updated events together (see
+// buildBatchEventPayload's own header comment for why mixing them in one
+// call is safe under DHIS2's default CREATE_AND_UPDATE import strategy).
+// A non-OK top-level status still yields a normal BatchOutcome (empty
+// succeeded set, one error per submitted event with the same message) --
+// callers don't need a separate failure path for "the whole batch was
+// rejected" vs "some events in it failed."
+export async function submitEventBatch(
+  engine: DataEngine,
+  items: BatchEventItem[],
+  provisioned: ProvisionedProgram,
+  orgUnitId: string,
+): Promise<BatchOutcome> {
+  const payload = buildBatchEventPayload(items, provisioned, orgUnitId)
+  const submittedEventIds = items.map((item) => item.existingEventId ?? item.eventId)
   const response = (await engine.mutate({
     resource: 'tracker?async=false',
     type: 'create',
     data: payload,
   })) as unknown as TrackerImportResponse
-  if (response.status !== 'OK') {
-    throw new Error(extractTrackerErrorMessage(response) ?? 'DHIS2 rejected this event.')
-  }
-  const eventId = extractCreatedEventId(response)
-  if (!eventId) throw new Error('DHIS2 reported success but no event id was returned.')
-  return eventId
-}
-
-// UNVERIFIED LIVE (see README/plan): the exact importStrategy value and
-// whether engine.mutate's 'create' type works for this at all (vs needing
-// a raw resource string with the query param baked in) needs confirming
-// against a real instance -- this is the sequencing step 2 spike that
-// couldn't be completed during development (no Route-authority account
-// available). Best-effort per DHIS2's own Tracker docs.
-export async function submitUpdateEvent(
-  engine: DataEngine,
-  provisioned: ProvisionedProgram,
-  orgUnitId: string,
-  existingEventId: string,
-  visit: MappedVisit,
-): Promise<void> {
-  const payload = buildUpdateEventPayload(provisioned, orgUnitId, existingEventId, visit)
-  const response = (await engine.mutate({
-    resource: 'tracker?async=false&importStrategy=UPDATE',
-    type: 'create',
-    data: payload,
-  })) as unknown as TrackerImportResponse
-  if (response.status !== 'OK') {
-    throw new Error(extractTrackerErrorMessage(response) ?? 'DHIS2 rejected this update.')
-  }
+  return parseTrackerBatchResult(response, submittedEventIds)
 }
