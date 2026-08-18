@@ -1,5 +1,6 @@
 import { Button, NoticeBox } from '@dhis2/ui'
 import { useState } from 'react'
+import i18n from '../locales'
 import type { RunSyncOptions, SyncRunResult, UseRunSyncResult } from '../hooks/useRunSync'
 
 interface Props {
@@ -13,10 +14,17 @@ interface Props {
   onSyncComplete: () => void
 }
 
-const KIND_LABEL: Record<string, string> = {
-  new: 'New',
-  updated: 'Updated',
-  unchanged: 'Unchanged',
+function kindLabel(kind: string): string {
+  switch (kind) {
+    case 'new':
+      return i18n.t('New')
+    case 'updated':
+      return i18n.t('Updated')
+    case 'unchanged':
+      return i18n.t('Unchanged')
+    default:
+      return kind
+  }
 }
 
 export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
@@ -56,22 +64,29 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {error && (
-        <NoticeBox error title="Preview failed">
+        <NoticeBox error title={i18n.t('Preview failed')}>
           {error}
         </NoticeBox>
       )}
 
       <Button onClick={handlePreview} loading={runSync.running && !preview}>
-        Preview sync
+        {i18n.t('Preview sync')}
       </Button>
 
       {preview && (
         <div style={{ border: '1px solid #dbe4ea', borderRadius: 6, padding: 16 }}>
           <p style={{ marginTop: 0 }}>
-            Fetched <strong>{preview.fetched}</strong>, mapped <strong>{preview.mappedOk}</strong>. Would create{' '}
-            <strong>{preview.classified.filter((c) => c.kind === 'new').length}</strong>, update{' '}
-            <strong>{preview.classified.filter((c) => c.kind === 'updated').length}</strong>, leave{' '}
-            <strong>{preview.unchanged}</strong> unchanged, and skip <strong>{preview.skippedMapping.length}</strong> unmappable.
+            {i18n.t(
+              'Fetched {{fetched}}, mapped {{mapped}}. Would create {{create}}, update {{update}}, leave {{unchanged}} unchanged, and skip {{skipped}} unmappable.',
+              {
+                fetched: preview.fetched,
+                mapped: preview.mappedOk,
+                create: preview.classified.filter((c) => c.kind === 'new').length,
+                update: preview.classified.filter((c) => c.kind === 'updated').length,
+                unchanged: preview.unchanged,
+                skipped: preview.skippedMapping.length,
+              },
+            )}
           </p>
 
           {preview.classified.length > 0 && (
@@ -79,9 +94,9 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
               <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid #dbe4ea' }}>
-                    <th style={{ padding: '4px 8px' }}>FHIR id</th>
-                    <th style={{ padding: '4px 8px' }}>Antigen</th>
-                    <th style={{ padding: '4px 8px' }}>Classification</th>
+                    <th style={{ padding: '4px 8px' }}>{i18n.t('FHIR id')}</th>
+                    <th style={{ padding: '4px 8px' }}>{i18n.t('Antigen')}</th>
+                    <th style={{ padding: '4px 8px' }}>{i18n.t('Classification')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -90,8 +105,8 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
                       <td style={{ padding: '4px 8px' }}>{item.visit.fhirImmunizationId}</td>
                       <td style={{ padding: '4px 8px' }}>{item.visit.antigenName}</td>
                       <td style={{ padding: '4px 8px' }}>
-                        {KIND_LABEL[item.kind]}
-                        {item.kind === 'unchanged' && item.versionUnknown ? ' (version unknown -- synced elsewhere)' : ''}
+                        {kindLabel(item.kind)}
+                        {item.kind === 'unchanged' && item.versionUnknown ? ` (${i18n.t('version unknown -- synced elsewhere')})` : ''}
                       </td>
                     </tr>
                   ))}
@@ -102,12 +117,10 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
 
           {preview.skippedMapping.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <strong>Unmappable:</strong>
+              <strong>{i18n.t('Unmappable --')}</strong>
               <ul>
                 {preview.skippedMapping.map((s) => (
-                  <li key={s.fhirImmunizationId}>
-                    {s.fhirImmunizationId}: {s.reason}
-                  </li>
+                  <li key={s.fhirImmunizationId}>{i18n.t('{{id}} -- {{reason}}', { id: s.fhirImmunizationId, reason: s.reason })}</li>
                 ))}
               </ul>
             </div>
@@ -115,7 +128,7 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
 
           <div style={{ marginTop: 12 }}>
             <Button primary onClick={handleConfirm} loading={confirming}>
-              Confirm and sync
+              {i18n.t('Confirm and sync')}
             </Button>
           </div>
         </div>

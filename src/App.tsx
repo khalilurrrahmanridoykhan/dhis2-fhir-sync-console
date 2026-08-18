@@ -1,4 +1,4 @@
-import { CircularLoader, HeaderBar } from '@dhis2/ui'
+import { CircularLoader } from '@dhis2/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PreviewPanel } from './components/PreviewPanel'
 import { RunErrorsPanel } from './components/RunErrorsPanel'
@@ -8,11 +8,11 @@ import { SettingsForm } from './components/SettingsForm'
 import { SyncedCountCard } from './components/SyncedCountCard'
 import { useCurrentUserAuthorities } from './hooks/useCurrentUserAuthorities'
 import { useFhirRoute } from './hooks/useFhirRoute'
-import { useIsStandalone } from './hooks/useIsStandalone'
 import { useRunHistory } from './hooks/useRunHistory'
 import { useRunSync, type RunSyncOptions } from './hooks/useRunSync'
 import { useSettings } from './hooks/useSettings'
 import { useSyncedIds } from './hooks/useSyncedIds'
+import i18n from './locales'
 
 export default function App() {
   return (
@@ -23,7 +23,6 @@ export default function App() {
 }
 
 function AppContent() {
-  const isStandalone = useIsStandalone()
   const authorities = useCurrentUserAuthorities()
   const { settings, loading: settingsLoading, saveSettings } = useSettings()
   const fhirRoute = useFhirRoute()
@@ -57,12 +56,9 @@ function AppContent() {
 
   if (settingsLoading || authorities.loading) {
     return (
-      <>
-        {isStandalone && <HeaderBar appName="FHIR Sync Console" />}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-          <CircularLoader />
-        </div>
-      </>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+        <CircularLoader />
+      </div>
     )
   }
 
@@ -70,10 +66,9 @@ function AppContent() {
 
   return (
     <>
-      {isStandalone && <HeaderBar appName="FHIR Sync Console" />}
       <div style={{ padding: 24, maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 32 }}>
         <section>
-          <h2>Settings</h2>
+          <h2>{i18n.t('Settings')}</h2>
           <SettingsForm settings={settings} onSave={saveSettings} authorities={authorities} fhirRoute={fhirRoute} />
         </section>
 
@@ -82,7 +77,7 @@ function AppContent() {
             <section style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
               <SyncedCountCard syncedIds={syncedIds} runHistory={runHistory} />
               <div style={{ flex: 1 }}>
-                <h2>Sync</h2>
+                <h2>{i18n.t('Sync')}</h2>
                 <PreviewPanel runSync={runSync} buildOptions={buildOptions} onSyncComplete={handleSyncComplete} />
                 <div style={{ marginTop: 16 }}>
                   <RunSyncButton runSync={runSync} buildOptions={buildOptions} onSyncComplete={handleSyncComplete} />
@@ -94,14 +89,14 @@ function AppContent() {
             </section>
 
             <section>
-              <h2>Run history</h2>
+              <h2>{i18n.t('Run history')}</h2>
               <RunHistoryTable runHistory={runHistory} />
             </section>
           </>
         )}
 
         {!ready && (
-          <p style={{ color: '#6e7a89' }}>Pick a FHIR route and a target organisation unit above before syncing.</p>
+          <p style={{ color: '#6e7a89' }}>{i18n.t('Pick a FHIR route and a target organisation unit above before syncing.')}</p>
         )}
       </div>
     </>

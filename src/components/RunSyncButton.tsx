@@ -1,5 +1,6 @@
 import { Button, NoticeBox } from '@dhis2/ui'
 import { useState } from 'react'
+import i18n from '../locales'
 import type { RunSyncOptions, UseRunSyncResult } from '../hooks/useRunSync'
 
 interface Props {
@@ -41,19 +42,28 @@ export function RunSyncButton({ runSync, buildOptions, onSyncComplete }: Props) 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {error && (
-        <NoticeBox error title="Sync failed">
+        <NoticeBox error title={i18n.t('Sync failed')}>
           {error}
         </NoticeBox>
       )}
       <Button onClick={handleRun} loading={runSync.running}>
-        Sync now
+        {i18n.t('Sync now')}
       </Button>
 
       {result && (
         <div style={{ fontSize: 13 }}>
-          Last run: fetched {result.fetched}, mapped {result.mappedOk}, created {result.created}, updated{' '}
-          {result.updated}, unchanged {result.unchanged}, skipped {result.skippedMapping.length}, errors{' '}
-          {result.errors.length}.
+          {i18n.t(
+            'Last run -- fetched {{fetched}}, mapped {{mapped}}, created {{created}}, updated {{updated}}, unchanged {{unchanged}}, skipped {{skipped}}, errors {{errors}}.',
+            {
+              fetched: result.fetched,
+              mapped: result.mappedOk,
+              created: result.created,
+              updated: result.updated,
+              unchanged: result.unchanged,
+              skipped: result.skippedMapping.length,
+              errors: result.errors.length,
+            },
+          )}
         </div>
       )}
     </div>

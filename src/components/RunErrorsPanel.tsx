@@ -1,4 +1,5 @@
 import { NoticeBox } from '@dhis2/ui'
+import i18n from '../locales'
 import type { UseRunSyncResult } from '../hooks/useRunSync'
 
 interface Props {
@@ -16,17 +17,18 @@ export function RunErrorsPanel({ runSync }: Props) {
 
   return (
     <div style={{ border: '1px solid #e8b4b4', borderRadius: 6, padding: 16 }}>
-      <h4 style={{ margin: '0 0 8px' }}>Errors from the last run ({errors.length})</h4>
+      <h4 style={{ margin: '0 0 8px' }}>{i18n.t('Errors from the last run ({{count}})', { count: errors.length })}</h4>
       <ul style={{ margin: 0, paddingLeft: 20 }}>
         {errors.map((e) => (
           <li key={e.fhirImmunizationId} style={{ marginBottom: 8 }}>
-            <strong>{e.fhirImmunizationId}</strong>: {e.message}
+            <strong>{e.fhirImmunizationId}</strong> -- {e.message}
           </li>
         ))}
       </ul>
-      <NoticeBox title="To retry">
-        Run "Preview sync" or "Sync now" again -- a resource that failed was never recorded as synced, so it's
-        picked up and retried automatically on the next run.
+      <NoticeBox title={i18n.t('To retry')}>
+        {i18n.t(
+          'Run "Preview sync" or "Sync now" again -- a resource that failed was never recorded as synced, so it\'s picked up and retried automatically on the next run.',
+        )}
       </NoticeBox>
     </div>
   )

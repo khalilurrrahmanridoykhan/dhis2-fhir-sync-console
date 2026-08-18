@@ -63,9 +63,9 @@ Program/data element provisioning payload shapes (`src/reused/provisioning.ts`) 
 ## Running
 
 ```bash
-yarn install
-yarn build       # or: yarn start, for local dev against a real DHIS2 instance
-yarn test
+npm install
+npm run build       # or: npm start, for local dev against a real DHIS2 instance
+npm test
 ```
 
 ## Verification performed

@@ -6,7 +6,6 @@ const config = {
     description:
         'A control panel for the FHIR Immunization Bridge -- pick or create a DHIS2 Route to a FHIR server, preview what a sync would do, run it, and see history and per-resource errors, all from inside DHIS2.',
 
-    coreCompatibility: '>=2.40',
     minDHIS2Version: '2.40',
 
     entryPoints: {

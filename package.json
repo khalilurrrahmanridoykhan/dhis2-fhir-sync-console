@@ -12,7 +12,7 @@
     "url": "https://github.com/khalilurrrahmanridoykhan/dhis2-fhir-sync-console/issues"
   },
   "homepage": "https://github.com/khalilurrrahmanridoykhan/dhis2-fhir-sync-console#readme",
-  "packageManager": "yarn@1.22.22",
+  "packageManager": "npm@10.9.2",
   "engines": {
     "node": ">=18"
   },

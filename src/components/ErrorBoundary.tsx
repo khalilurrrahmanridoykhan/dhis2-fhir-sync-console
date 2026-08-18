@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { NoticeBox } from '@dhis2/ui'
+import i18n from '../locales'
 
 interface Props {
   children: ReactNode
@@ -24,7 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         <div style={{ padding: 24 }}>
-          <NoticeBox error title="FHIR Sync Console hit an unexpected error">
+          <NoticeBox error title={i18n.t('FHIR Sync Console hit an unexpected error')}>
             {this.state.error.message}
           </NoticeBox>
         </div>
