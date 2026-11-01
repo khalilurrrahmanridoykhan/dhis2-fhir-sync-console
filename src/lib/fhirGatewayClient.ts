@@ -1,15 +1,8 @@
-// Talks to the standalone Java/Camel sync service (dhis2-route-b-sync), not the DHIS2
-// Route-proxied path the rest of this console uses -- that service is this console's
-// own backend, not a third-party FHIR server, so a direct same-purpose fetch is fine
-// (the Route-proxy rule in the README is about third-party credentials, not this).
-// Callers pass the configured base URL in (see SettingsBlob.gatewayBaseUrl) -- this is
-// just the fallback for an install that hasn't set one yet.
-export const DEFAULT_GATEWAY_BASE_URL = 'http://localhost:8080'
-
-// Matches SyncTriggerController's DIRECT_ENDPOINT_BY_TYPE keys on the Java side.
-// Only immunization-* is genuinely two-way -- org-units/option-sets/tracked-entities
-// are DHIS2 -> FHIR metadata sync only (see the project plan's origin-tracking addendum
-// on why the reverse direction for metadata is out of scope for now).
+// Talks to the standalone Java/Camel sync service (dhis2-route-b-sync) through a DHIS2
+// Route, same mechanism as fhirRouteFetch.ts -- NOT for hiding credentials (the gateway
+// has none), but so the browser never needs direct network access to that service, only
+// DHIS2 itself does, and the gateway needs no CORS config of its own. Every call goes
+// through this DHIS2 instance's own /api/routes/{id}/run(/{subPath}), same-origin.
 export type SyncType =
   | 'immunization-to-fhir'
   | 'immunization-to-dhis2'
@@ -19,6 +12,9 @@ export type SyncType =
 
 export interface GatewaySyncLogEntry {
   id: number
+  // Which of the five routes wrote this entry -- needed because "direction" alone can't
+  // tell an Immunization entry apart from a metadata one (both use "dhis2-to-fhir" below).
+  syncType: 'immunization' | 'org-unit' | 'option-set' | 'tracked-entity'
   // All five routes write SyncLog entries using these two literal direction values --
   // org-units/option-sets/tracked-entities are one-way, so always 'dhis2-to-fhir' for them.
   direction: 'dhis2-to-fhir' | 'fhir-to-dhis2'
@@ -28,18 +24,31 @@ export interface GatewaySyncLogEntry {
   timestamp: string
 }
 
-export async function triggerGatewaySync(baseUrl: string, type: SyncType): Promise<void> {
-  const response = await fetch(`${baseUrl}/api/sync/${type}`, { method: 'POST' })
+function routeRunUrl(routeId: string, subPath: string): string {
+  return `${window.location.origin}/api/routes/${routeId}/run/${subPath}`
+}
+
+export async function triggerGatewaySync(routeId: string, type: SyncType): Promise<void> {
+  const response = await fetch(routeRunUrl(routeId, `api/sync/${type}`), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
     throw new Error(body?.error ?? `Gateway sync trigger failed: HTTP ${response.status}`)
   }
 }
 
-export async function fetchGatewaySyncHistory(baseUrl: string): Promise<GatewaySyncLogEntry[]> {
-  const response = await fetch(`${baseUrl}/api/sync-log`)
+export async function fetchGatewaySyncHistory(routeId: string): Promise<GatewaySyncLogEntry[]> {
+  const response = await fetch(routeRunUrl(routeId, 'api/sync-log'), {
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  })
   if (!response.ok) {
     throw new Error(`Gateway history fetch failed: HTTP ${response.status}`)
   }
-  return response.json()
+  // Deliberately not gated on Content-Type -- see fhirRouteFetch.ts's header comment on
+  // why engine.query()/its implicit parsing isn't used here.
+  return (await response.json()) as GatewaySyncLogEntry[]
 }

@@ -33,11 +33,14 @@ export interface SettingsBlob {
   pageCount: number
   maxPages: number
   notifyUserGroupId: string | null
-  // Base URL of the standalone Java/Camel sync service (dhis2-route-b-sync) the
-  // FhirGatewayPanel talks to. null means "use the built-in default" --
-  // see DEFAULT_GATEWAY_BASE_URL in lib/fhirGatewayClient.ts -- so every existing
-  // saved settings blob (without this field) keeps working unchanged.
-  gatewayBaseUrl: string | null
+  // DHIS2 Route pointing at the standalone Java/Camel sync service
+  // (dhis2-route-b-sync) FhirGatewayPanel talks to. A Route here isn't about
+  // hiding credentials (the gateway has none) -- it's so the BROWSER never
+  // needs direct network access to that service, only DHIS2 itself does,
+  // and so the gateway service needs no CORS config of its own. Same
+  // wildcard-route mechanism as `routeId` above, just a second, separate
+  // Route since it points at a different base URL.
+  gatewayRouteId: string | null
 }
 
 export function emptySettingsBlob(): SettingsBlob {
@@ -48,7 +51,7 @@ export function emptySettingsBlob(): SettingsBlob {
     pageCount: 20,
     maxPages: 5,
     notifyUserGroupId: null,
-    gatewayBaseUrl: null,
+    gatewayRouteId: null,
   }
 }
 

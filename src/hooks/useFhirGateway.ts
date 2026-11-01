@@ -18,18 +18,25 @@ export interface UseFhirGatewayResult extends State {
   trigger: (type: SyncType) => Promise<void>
 }
 
-export function useFhirGateway(baseUrl: string): UseFhirGatewayResult {
-  const [state, setState] = useState<State>({ loading: true, error: null, history: [], triggering: null })
+// routeId null means no gateway Route has been configured yet (see SettingsForm) --
+// refresh/trigger become no-ops that surface a clear error instead of calling fetch()
+// with a garbage URL.
+export function useFhirGateway(routeId: string | null): UseFhirGatewayResult {
+  const [state, setState] = useState<State>({ loading: false, error: null, history: [], triggering: null })
 
   const refresh = useCallback(async () => {
+    if (!routeId) {
+      setState((prev) => ({ ...prev, loading: false, error: null, history: [] }))
+      return
+    }
     setState((prev) => ({ ...prev, loading: true, error: null }))
     try {
-      const history = await fetchGatewaySyncHistory(baseUrl)
+      const history = await fetchGatewaySyncHistory(routeId)
       setState((prev) => ({ ...prev, loading: false, history }))
     } catch (error) {
       setState((prev) => ({ ...prev, loading: false, error: error instanceof Error ? error.message : String(error) }))
     }
-  }, [baseUrl])
+  }, [routeId])
 
   useEffect(() => {
     refresh()
@@ -37,9 +44,13 @@ export function useFhirGateway(baseUrl: string): UseFhirGatewayResult {
 
   const trigger = useCallback(
     async (type: SyncType) => {
+      if (!routeId) {
+        setState((prev) => ({ ...prev, error: 'Pick or create a gateway Route in Settings first.' }))
+        return
+      }
       setState((prev) => ({ ...prev, triggering: type, error: null }))
       try {
-        await triggerGatewaySync(baseUrl, type)
+        await triggerGatewaySync(routeId, type)
         await refresh()
       } catch (error) {
         setState((prev) => ({ ...prev, error: error instanceof Error ? error.message : String(error) }))
@@ -47,7 +58,7 @@ export function useFhirGateway(baseUrl: string): UseFhirGatewayResult {
         setState((prev) => ({ ...prev, triggering: null }))
       }
     },
-    [baseUrl, refresh],
+    [routeId, refresh],
   )
 
   return { ...state, refresh, trigger }

@@ -2,20 +2,19 @@ import { useDataQuery } from '@dhis2/app-runtime'
 import {
   Button,
   CircularLoader,
+  IconAdd16,
   InputField,
   NoticeBox,
   OrganisationUnitTree,
-  Radio,
   SingleSelectField,
   SingleSelectOption,
 } from '@dhis2/ui'
 import { useState } from 'react'
-import type { CreateRouteInput, UseFhirRouteResult } from '../hooks/useFhirRoute'
+import type { UseFhirRouteResult } from '../hooks/useFhirRoute'
 import type { CurrentUserAuthorities } from '../hooks/useCurrentUserAuthorities'
+import type { UseSettingsWizardResult } from '../hooks/useSettingsWizard'
 import i18n from '../i18n'
-import type { FhirAuthType, SettingsBlob } from '../lib/dataStore'
-import { DEFAULT_GATEWAY_BASE_URL } from '../lib/fhirGatewayClient'
-import { isInRange } from '../lib/validation'
+import { RouteCreateModal } from './RouteCreateModal'
 
 const orgUnitRootsQuery = {
   roots: { resource: 'organisationUnits', params: { filter: 'level:eq:1', fields: 'id', paging: 'false' } },
@@ -35,55 +34,49 @@ interface UserGroupsResponse {
 }
 
 interface Props {
-  settings: SettingsBlob
-  onSave: (settings: SettingsBlob) => Promise<void>
+  wizard: UseSettingsWizardResult
   authorities: CurrentUserAuthorities
   fhirRoute: UseFhirRouteResult
 }
 
-export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props) {
-  const [draft, setDraft] = useState<SettingsBlob>(settings)
-  const [selectedOrgUnitPath, setSelectedOrgUnitPath] = useState<string | null>(null)
-  const [showCreateRoute, setShowCreateRoute] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+// Three-step wizard (Route setup -> Organisation unit & paging -> Notifications),
+// each step gated on the previous one's validity -- see useSettingsWizard. The
+// secondary sidebar in AppShell drives the SAME step state (lifted up to App.tsx),
+// so clicking a sidebar item here and clicking "Next" below stay in sync.
+export function SettingsWizard({ wizard, authorities, fhirRoute }: Props) {
+  return (
+    <div style={{ maxWidth: 640 }}>
+      {wizard.saveError && (
+        <div style={{ marginBottom: 16 }}>
+          <NoticeBox error title={i18n.t('Could not save settings')}>
+            {wizard.saveError}
+          </NoticeBox>
+        </div>
+      )}
+      {wizard.saved && (
+        <div style={{ marginBottom: 16 }}>
+          <NoticeBox valid title={i18n.t('Settings saved')}>
+            {i18n.t('Your changes have been saved.')}
+          </NoticeBox>
+        </div>
+      )}
 
-  const { data: rootsData } = useDataQuery<OrgUnitRootsResponse>(orgUnitRootsQuery)
-  const { data: groupsData } = useDataQuery<UserGroupsResponse>(userGroupsQuery)
+      {wizard.step === 0 && <RouteSetupStep wizard={wizard} authorities={authorities} fhirRoute={fhirRoute} />}
+      {wizard.step === 1 && <OrgUnitAndPagingStep wizard={wizard} />}
+      {wizard.step === 2 && <NotifyStep wizard={wizard} />}
+    </div>
+  )
+}
 
-  async function handleSave() {
-    setSaving(true)
-    setSaveError(null)
-    setSaved(false)
-    try {
-      await onSave(draft)
-      setSaved(true)
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setSaving(false)
-    }
-  }
+function RouteSetupStep({ wizard, authorities, fhirRoute }: Props) {
+  const [openModal, setOpenModal] = useState<'fhir' | 'gateway' | null>(null)
+  const { draft, setDraft } = wizard
 
   const selectedRoute = fhirRoute.wildcardRoutes.find((r) => r.id === draft.routeId) ?? null
-
-  const pageCountValid = isInRange(draft.pageCount, PAGE_COUNT_RANGE)
-  const maxPagesValid = isInRange(draft.maxPages, MAX_PAGES_RANGE)
+  const selectedGatewayRoute = fhirRoute.wildcardRoutes.find((r) => r.id === draft.gatewayRouteId) ?? null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
-      {saveError && (
-        <NoticeBox error title={i18n.t('Could not save settings')}>
-          {saveError}
-        </NoticeBox>
-      )}
-      {saved && (
-        <NoticeBox valid title={i18n.t('Settings saved')}>
-          {i18n.t('Your changes have been saved.')}
-        </NoticeBox>
-      )}
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <section>
         <h3 style={{ margin: '0 0 8px' }}>{i18n.t('FHIR connection')}</h3>
         <p style={{ color: '#6e7a89', fontSize: 13, marginTop: 0 }}>
@@ -97,8 +90,9 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
           selectedRouteId={draft.routeId}
           onSelect={(id) => setDraft((prev) => ({ ...prev, routeId: id }))}
           canCreateRoutes={authorities.canCreateRoutes}
-          showCreateRoute={showCreateRoute}
-          onToggleCreateRoute={setShowCreateRoute}
+          onRequestCreate={() => setOpenModal('fhir')}
+          label={i18n.t('Route')}
+          emptyTitle={i18n.t('No routes to a FHIR server found yet')}
         />
 
         {selectedRoute && (
@@ -108,6 +102,74 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
         )}
       </section>
 
+      <section>
+        <h3 style={{ margin: '0 0 8px' }}>{i18n.t('Immunization gateway service')}</h3>
+        <p style={{ color: '#6e7a89', fontSize: 13, marginTop: 0 }}>
+          {i18n.t(
+            'The gateway panels talk to the standalone Java/Camel sync service (dhis2-route-b-sync) through a DHIS2 Route too -- not to hide credentials (it has none), but so your browser never needs direct network access to that service, and the service needs no CORS config of its own.',
+          )}
+        </p>
+
+        <RoutePicker
+          fhirRoute={fhirRoute}
+          selectedRouteId={draft.gatewayRouteId}
+          onSelect={(id) => setDraft((prev) => ({ ...prev, gatewayRouteId: id }))}
+          canCreateRoutes={authorities.canCreateRoutes}
+          onRequestCreate={() => setOpenModal('gateway')}
+          label={i18n.t('Gateway route')}
+          emptyTitle={i18n.t('No routes to the gateway service found yet')}
+        />
+
+        {selectedGatewayRoute && (
+          <p style={{ fontSize: 12, color: '#6e7a89', marginTop: 4 }}>
+            {i18n.t('Selected route target --')} <code>{selectedGatewayRoute.url}</code>
+          </p>
+        )}
+      </section>
+
+      <div>
+        <Button primary onClick={wizard.next} disabled={!wizard.stepValid[0]}>
+          {i18n.t('Next')}
+        </Button>
+      </div>
+
+      {openModal === 'fhir' && (
+        <RouteCreateModal
+          fhirRoute={fhirRoute}
+          title={i18n.t('Add FHIR connection route')}
+          defaultBaseUrl="https://hapi.fhir.org/baseR4"
+          baseUrlLabel={i18n.t('FHIR base URL')}
+          onCreated={(id) => {
+            setDraft((prev) => ({ ...prev, routeId: id }))
+            setOpenModal(null)
+          }}
+          onClose={() => setOpenModal(null)}
+        />
+      )}
+      {openModal === 'gateway' && (
+        <RouteCreateModal
+          fhirRoute={fhirRoute}
+          title={i18n.t('Add gateway service route')}
+          defaultBaseUrl="http://localhost:8090"
+          baseUrlLabel={i18n.t('Gateway service base URL')}
+          onCreated={(id) => {
+            setDraft((prev) => ({ ...prev, gatewayRouteId: id }))
+            setOpenModal(null)
+          }}
+          onClose={() => setOpenModal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function OrgUnitAndPagingStep({ wizard }: { wizard: UseSettingsWizardResult }) {
+  const { draft, setDraft } = wizard
+  const [selectedOrgUnitPath, setSelectedOrgUnitPath] = useState<string | null>(null)
+  const { data: rootsData } = useDataQuery<OrgUnitRootsResponse>(orgUnitRootsQuery)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <section>
         <h3 style={{ margin: '0 0 8px' }}>{i18n.t('Target organisation unit')}</h3>
         {rootsData ? (
@@ -133,9 +195,9 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
           type="number"
           value={String(draft.pageCount)}
           onChange={({ value }) => setDraft((prev) => ({ ...prev, pageCount: Number(value ?? prev.pageCount) }))}
-          error={!pageCountValid}
+          error={!wizard.pageCountValid}
           validationText={
-            pageCountValid
+            wizard.pageCountValid
               ? undefined
               : i18n.t('Must be between {{min}} and {{max}}.', { min: PAGE_COUNT_RANGE.min, max: PAGE_COUNT_RANGE.max })
           }
@@ -146,9 +208,9 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
           type="number"
           value={String(draft.maxPages)}
           onChange={({ value }) => setDraft((prev) => ({ ...prev, maxPages: Number(value ?? prev.maxPages) }))}
-          error={!maxPagesValid}
+          error={!wizard.maxPagesValid}
           validationText={
-            maxPagesValid
+            wizard.maxPagesValid
               ? undefined
               : i18n.t('Must be between {{min}} and {{max}}.', { min: MAX_PAGES_RANGE.min, max: MAX_PAGES_RANGE.max })
           }
@@ -156,6 +218,22 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
         />
       </section>
 
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button onClick={wizard.back}>{i18n.t('Back')}</Button>
+        <Button primary onClick={wizard.next} disabled={!wizard.stepValid[1]}>
+          {i18n.t('Next')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function NotifyStep({ wizard }: { wizard: UseSettingsWizardResult }) {
+  const { draft, setDraft } = wizard
+  const { data: groupsData } = useDataQuery<UserGroupsResponse>(userGroupsQuery)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <section>
         <h3 style={{ margin: '0 0 8px' }}>{i18n.t('Notify on errors')}</h3>
         {groupsData ? (
@@ -174,30 +252,12 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
         )}
       </section>
 
-      <section>
-        <h3 style={{ margin: '0 0 8px' }}>{i18n.t('Immunization gateway service')}</h3>
-        <p style={{ color: '#6e7a89', fontSize: 13, marginTop: 0 }}>
-          {i18n.t(
-            'Base URL of the standalone Java/Camel sync service (dhis2-route-b-sync) the gateway panel below talks to directly from your browser -- not through a DHIS2 Route, since that service is this console\'s own backend.',
-          )}
-        </p>
-        <InputField
-          label={i18n.t('Gateway base URL')}
-          value={draft.gatewayBaseUrl ?? ''}
-          onChange={({ value }) => setDraft((prev) => ({ ...prev, gatewayBaseUrl: value?.trim() ? value.trim() : null }))}
-          placeholder={DEFAULT_GATEWAY_BASE_URL}
-          helpText={i18n.t('Leave blank to use the default ({{url}}).', { url: DEFAULT_GATEWAY_BASE_URL })}
-        />
-      </section>
-
-      <Button
-        primary
-        onClick={handleSave}
-        loading={saving}
-        disabled={!draft.routeId || !draft.orgUnitId || !pageCountValid || !maxPagesValid}
-      >
-        {i18n.t('Save settings')}
-      </Button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button onClick={wizard.back}>{i18n.t('Back')}</Button>
+        <Button primary onClick={wizard.save} loading={wizard.saving}>
+          {i18n.t('Save settings')}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -207,15 +267,17 @@ function RoutePicker({
   selectedRouteId,
   onSelect,
   canCreateRoutes,
-  showCreateRoute,
-  onToggleCreateRoute,
+  onRequestCreate,
+  label,
+  emptyTitle,
 }: {
   fhirRoute: UseFhirRouteResult
   selectedRouteId: string | null
   onSelect: (id: string) => void
   canCreateRoutes: boolean
-  showCreateRoute: boolean
-  onToggleCreateRoute: (show: boolean) => void
+  onRequestCreate: () => void
+  label: string
+  emptyTitle: string
 }) {
   if (fhirRoute.loading) return <CircularLoader small />
 
@@ -230,15 +292,13 @@ function RoutePicker({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {fhirRoute.wildcardRoutes.length > 0 ? (
-        <SingleSelectField label={i18n.t('Route')} selected={selectedRouteId ?? ''} onChange={({ selected }) => onSelect(selected)}>
+        <SingleSelectField label={label} selected={selectedRouteId ?? ''} onChange={({ selected }) => onSelect(selected)}>
           {fhirRoute.wildcardRoutes.map((r) => (
             <SingleSelectOption key={r.id} value={r.id} label={r.name} />
           ))}
         </SingleSelectField>
       ) : (
-        <NoticeBox title={i18n.t('No routes to a FHIR server found yet')}>
-          {i18n.t('Set one up in the Route Manager app, or create one here.')}
-        </NoticeBox>
+        <NoticeBox title={emptyTitle}>{i18n.t('Set one up in the Route Manager app, or create one here.')}</NoticeBox>
       )}
 
       <div style={{ display: 'flex', gap: 12 }}>
@@ -246,8 +306,8 @@ function RoutePicker({
           {i18n.t('Open Route Manager')}
         </Button>
         {canCreateRoutes && (
-          <Button small onClick={() => onToggleCreateRoute(!showCreateRoute)}>
-            {showCreateRoute ? i18n.t('Cancel') : i18n.t('Create a route here')}
+          <Button small icon={<IconAdd16 />} onClick={onRequestCreate}>
+            {i18n.t('Add route')}
           </Button>
         )}
       </div>
@@ -259,127 +319,6 @@ function RoutePicker({
           )}
         </NoticeBox>
       )}
-
-      {showCreateRoute && canCreateRoutes && <CreateRouteForm fhirRoute={fhirRoute} onCreated={onSelect} />}
-    </div>
-  )
-}
-
-function CreateRouteForm({ fhirRoute, onCreated }: { fhirRoute: UseFhirRouteResult; onCreated: (id: string) => void }) {
-  const [name, setName] = useState('')
-  const [baseUrl, setBaseUrl] = useState('https://hapi.fhir.org/baseR4')
-  const [authType, setAuthType] = useState<FhirAuthType>('none')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
-  const [timeoutSeconds, setTimeoutSeconds] = useState('30')
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleCreate() {
-    if (!name.trim() || !baseUrl.trim()) {
-      setError(i18n.t('Name and FHIR base URL are required.'))
-      return
-    }
-    setError(null)
-    setCreating(true)
-    try {
-      const input: CreateRouteInput = {
-        name: name.trim(),
-        code: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-        baseUrl: baseUrl.trim(),
-        authType,
-        responseTimeoutSeconds: Number(timeoutSeconds) || 30,
-        authConfig:
-          authType === 'http-basic'
-            ? { username, password }
-            : authType === 'api-token' || authType === 'api-headers'
-              ? { token }
-              : undefined,
-      }
-      const id = await fhirRoute.createRoute(input)
-      onCreated(id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  return (
-    <div style={{ border: '1px solid #dbe4ea', borderRadius: 6, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {error && (
-        <NoticeBox error title={i18n.t('Could not create route')}>
-          {error}
-        </NoticeBox>
-      )}
-      <InputField
-        label={i18n.t('Route name')}
-        value={name}
-        onChange={({ value }) => setName(value ?? '')}
-        placeholder={i18n.t('e.g. Clinic FHIR server')}
-      />
-      <InputField
-        label={i18n.t('FHIR base URL')}
-        value={baseUrl}
-        onChange={({ value }) => setBaseUrl(value ?? '')}
-        helpText={i18n.t(
-          'A "/**" wildcard suffix is added automatically -- required to proxy a paginated FHIR API through this route.',
-        )}
-      />
-      <InputField
-        label={i18n.t('Response timeout (seconds, max 60)')}
-        type="number"
-        value={timeoutSeconds}
-        onChange={({ value }) => setTimeoutSeconds(value ?? '30')}
-      />
-
-      <div>
-        <div style={{ marginBottom: 6, fontWeight: 500 }}>{i18n.t('Authentication')}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Radio label={i18n.t('None (public server)')} checked={authType === 'none'} onChange={() => setAuthType('none')} />
-          <Radio
-            label={i18n.t('Basic auth (username/password)')}
-            checked={authType === 'http-basic'}
-            onChange={() => setAuthType('http-basic')}
-          />
-          <Radio
-            label={i18n.t('Bearer token (incl. SMART on FHIR static token)')}
-            checked={authType === 'api-headers'}
-            onChange={() => setAuthType('api-headers')}
-          />
-          <Radio label={i18n.t('API token')} checked={authType === 'api-token'} onChange={() => setAuthType('api-token')} />
-        </div>
-      </div>
-
-      {authType === 'http-basic' && (
-        <>
-          <InputField label={i18n.t('Username')} value={username} onChange={({ value }) => setUsername(value ?? '')} />
-          <InputField
-            label={i18n.t('Password')}
-            type="password"
-            value={password}
-            onChange={({ value }) => setPassword(value ?? '')}
-          />
-        </>
-      )}
-      {(authType === 'api-token' || authType === 'api-headers') && (
-        <InputField
-          label={authType === 'api-headers' ? i18n.t('Bearer token') : i18n.t('API token')}
-          type="password"
-          value={token}
-          onChange={({ value }) => setToken(value ?? '')}
-          helpText={
-            authType === 'api-headers'
-              ? i18n.t('Sent as "Authorization -- Bearer <token>". Not auto-refreshed -- rotate manually if it expires.')
-              : undefined
-          }
-        />
-      )}
-
-      <Button primary small onClick={handleCreate} loading={creating}>
-        {i18n.t('Create route')}
-      </Button>
     </div>
   )
 }
