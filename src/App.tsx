@@ -15,6 +15,7 @@ import { useRunSync, type RunSyncOptions } from './hooks/useRunSync'
 import { useSettings } from './hooks/useSettings'
 import { useSyncedIds } from './hooks/useSyncedIds'
 import i18n from './i18n'
+import { DEFAULT_GATEWAY_BASE_URL } from './lib/fhirGatewayClient'
 
 export default function App() {
   return (
@@ -31,7 +32,7 @@ function AppContent() {
   const syncedIds = useSyncedIds()
   const runHistory = useRunHistory()
   const runSync = useRunSync()
-  const fhirGateway = useFhirGateway()
+  const fhirGateway = useFhirGateway(settings.gatewayBaseUrl ?? DEFAULT_GATEWAY_BASE_URL)
 
   // useRunSync() keeps its own separate useSyncedIds()/useRunHistory()
   // instances internally -- after a real run, THIS handler is what tells

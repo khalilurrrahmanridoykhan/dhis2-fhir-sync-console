@@ -2,7 +2,9 @@
 // Route-proxied path the rest of this console uses -- that service is this console's
 // own backend, not a third-party FHIR server, so a direct same-purpose fetch is fine
 // (the Route-proxy rule in the README is about third-party credentials, not this).
-const GATEWAY_BASE_URL = 'http://localhost:8080'
+// Callers pass the configured base URL in (see SettingsBlob.gatewayBaseUrl) -- this is
+// just the fallback for an install that hasn't set one yet.
+export const DEFAULT_GATEWAY_BASE_URL = 'http://localhost:8080'
 
 // Matches SyncTriggerController's DIRECT_ENDPOINT_BY_TYPE keys on the Java side.
 // Only immunization-* is genuinely two-way -- org-units/option-sets/tracked-entities
@@ -26,16 +28,16 @@ export interface GatewaySyncLogEntry {
   timestamp: string
 }
 
-export async function triggerGatewaySync(type: SyncType): Promise<void> {
-  const response = await fetch(`${GATEWAY_BASE_URL}/api/sync/${type}`, { method: 'POST' })
+export async function triggerGatewaySync(baseUrl: string, type: SyncType): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/sync/${type}`, { method: 'POST' })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
     throw new Error(body?.error ?? `Gateway sync trigger failed: HTTP ${response.status}`)
   }
 }
 
-export async function fetchGatewaySyncHistory(): Promise<GatewaySyncLogEntry[]> {
-  const response = await fetch(`${GATEWAY_BASE_URL}/api/sync-log`)
+export async function fetchGatewaySyncHistory(baseUrl: string): Promise<GatewaySyncLogEntry[]> {
+  const response = await fetch(`${baseUrl}/api/sync-log`)
   if (!response.ok) {
     throw new Error(`Gateway history fetch failed: HTTP ${response.status}`)
   }

@@ -14,6 +14,7 @@ import type { CreateRouteInput, UseFhirRouteResult } from '../hooks/useFhirRoute
 import type { CurrentUserAuthorities } from '../hooks/useCurrentUserAuthorities'
 import i18n from '../i18n'
 import type { FhirAuthType, SettingsBlob } from '../lib/dataStore'
+import { DEFAULT_GATEWAY_BASE_URL } from '../lib/fhirGatewayClient'
 import { isInRange } from '../lib/validation'
 
 const orgUnitRootsQuery = {
@@ -171,6 +172,22 @@ export function SettingsForm({ settings, onSave, authorities, fhirRoute }: Props
         ) : (
           <CircularLoader small />
         )}
+      </section>
+
+      <section>
+        <h3 style={{ margin: '0 0 8px' }}>{i18n.t('Immunization gateway service')}</h3>
+        <p style={{ color: '#6e7a89', fontSize: 13, marginTop: 0 }}>
+          {i18n.t(
+            'Base URL of the standalone Java/Camel sync service (dhis2-route-b-sync) the gateway panel below talks to directly from your browser -- not through a DHIS2 Route, since that service is this console\'s own backend.',
+          )}
+        </p>
+        <InputField
+          label={i18n.t('Gateway base URL')}
+          value={draft.gatewayBaseUrl ?? ''}
+          onChange={({ value }) => setDraft((prev) => ({ ...prev, gatewayBaseUrl: value?.trim() ? value.trim() : null }))}
+          placeholder={DEFAULT_GATEWAY_BASE_URL}
+          helpText={i18n.t('Leave blank to use the default ({{url}}).', { url: DEFAULT_GATEWAY_BASE_URL })}
+        />
       </section>
 
       <Button

@@ -18,18 +18,18 @@ export interface UseFhirGatewayResult extends State {
   trigger: (type: SyncType) => Promise<void>
 }
 
-export function useFhirGateway(): UseFhirGatewayResult {
+export function useFhirGateway(baseUrl: string): UseFhirGatewayResult {
   const [state, setState] = useState<State>({ loading: true, error: null, history: [], triggering: null })
 
   const refresh = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }))
     try {
-      const history = await fetchGatewaySyncHistory()
+      const history = await fetchGatewaySyncHistory(baseUrl)
       setState((prev) => ({ ...prev, loading: false, history }))
     } catch (error) {
       setState((prev) => ({ ...prev, loading: false, error: error instanceof Error ? error.message : String(error) }))
     }
-  }, [])
+  }, [baseUrl])
 
   useEffect(() => {
     refresh()
@@ -39,7 +39,7 @@ export function useFhirGateway(): UseFhirGatewayResult {
     async (type: SyncType) => {
       setState((prev) => ({ ...prev, triggering: type, error: null }))
       try {
-        await triggerGatewaySync(type)
+        await triggerGatewaySync(baseUrl, type)
         await refresh()
       } catch (error) {
         setState((prev) => ({ ...prev, error: error instanceof Error ? error.message : String(error) }))
@@ -47,7 +47,7 @@ export function useFhirGateway(): UseFhirGatewayResult {
         setState((prev) => ({ ...prev, triggering: null }))
       }
     },
-    [refresh],
+    [baseUrl, refresh],
   )
 
   return { ...state, refresh, trigger }
