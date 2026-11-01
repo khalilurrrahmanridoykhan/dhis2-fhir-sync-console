@@ -64,15 +64,6 @@ export function FhirGatewayPanel({ gateway }: Props) {
           {i18n.t('Sync tracked entities')}
         </Button>
       </div>
-      <p style={{ color: '#6e7a89', fontSize: 12, marginTop: 4 }}>
-        {i18n.t(
-          'Tracked entities still uses a legacy DHIS2 API and fails against current DHIS2 versions -- a known, unfixed gap, not a new bug.',
-        )}
-      </p>
-      <p style={{ color: '#6e7a89', fontSize: 12 }}>
-        {i18n.t('Metadata runs are not yet recorded in the history table below -- only Immunization runs are.')}
-      </p>
-
       {gateway.error && (
         <div style={{ marginTop: 8 }}>
           <NoticeBox error title={i18n.t('Gateway error')}>

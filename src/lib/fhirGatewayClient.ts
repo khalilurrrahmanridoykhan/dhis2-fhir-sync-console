@@ -17,8 +17,8 @@ export type SyncType =
 
 export interface GatewaySyncLogEntry {
   id: number
-  // Only the two Immunization routes write SyncLog entries today -- org-units/option-sets/
-  // tracked-entities aren't instrumented yet, so they won't appear here even when triggered.
+  // All five routes write SyncLog entries using these two literal direction values --
+  // org-units/option-sets/tracked-entities are one-way, so always 'dhis2-to-fhir' for them.
   direction: 'dhis2-to-fhir' | 'fhir-to-dhis2'
   sourceId: string
   action: string
