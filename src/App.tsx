@@ -1,5 +1,6 @@
 import { CircularLoader } from '@dhis2/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { FhirGatewayPanel } from './components/FhirGatewayPanel'
 import { PreviewPanel } from './components/PreviewPanel'
 import { RunErrorsPanel } from './components/RunErrorsPanel'
 import { RunHistoryTable } from './components/RunHistoryTable'
@@ -7,6 +8,7 @@ import { RunSyncButton } from './components/RunSyncButton'
 import { SettingsForm } from './components/SettingsForm'
 import { SyncedCountCard } from './components/SyncedCountCard'
 import { useCurrentUserAuthorities } from './hooks/useCurrentUserAuthorities'
+import { useFhirGateway } from './hooks/useFhirGateway'
 import { useFhirRoute } from './hooks/useFhirRoute'
 import { useRunHistory } from './hooks/useRunHistory'
 import { useRunSync, type RunSyncOptions } from './hooks/useRunSync'
@@ -29,6 +31,7 @@ function AppContent() {
   const syncedIds = useSyncedIds()
   const runHistory = useRunHistory()
   const runSync = useRunSync()
+  const fhirGateway = useFhirGateway()
 
   // useRunSync() keeps its own separate useSyncedIds()/useRunHistory()
   // instances internally -- after a real run, THIS handler is what tells
@@ -98,6 +101,11 @@ function AppContent() {
         {!ready && (
           <p style={{ color: '#6e7a89' }}>{i18n.t('Pick a FHIR route and a target organisation unit above before syncing.')}</p>
         )}
+
+        <section>
+          <h2>{i18n.t('Immunization gateway sync')}</h2>
+          <FhirGatewayPanel gateway={fhirGateway} />
+        </section>
       </div>
     </>
   )
