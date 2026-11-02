@@ -24,6 +24,12 @@ export interface GatewaySyncLogEntry {
   timestamp: string
 }
 
+export interface GatewayPreviewEntry {
+  sourceId: string
+  action: string
+  message: string | null
+}
+
 function routeRunUrl(routeId: string, subPath: string): string {
   return `${window.location.origin}/api/routes/${routeId}/run/${subPath}`
 }
@@ -38,6 +44,19 @@ export async function triggerGatewaySync(routeId: string, type: SyncType): Promi
     const body = await response.json().catch(() => null)
     throw new Error(body?.error ?? `Gateway sync trigger failed: HTTP ${response.status}`)
   }
+}
+
+// Read-only: fetches and converts exactly like a real sync, minus the write step (see
+// PreviewController.java) -- never creates/updates anything in DHIS2 or FHIR.
+export async function fetchGatewayPreview(routeId: string, type: SyncType): Promise<GatewayPreviewEntry[]> {
+  const response = await fetch(routeRunUrl(routeId, `api/preview/${type}`), {
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  })
+  if (!response.ok) {
+    throw new Error(`Gateway preview failed: HTTP ${response.status}`)
+  }
+  return (await response.json()) as GatewayPreviewEntry[]
 }
 
 export async function fetchGatewaySyncHistory(routeId: string): Promise<GatewaySyncLogEntry[]> {

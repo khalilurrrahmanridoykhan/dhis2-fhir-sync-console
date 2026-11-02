@@ -1,7 +1,10 @@
 import { Button, NoticeBox } from '@dhis2/ui'
 import { useState } from 'react'
 import i18n from '../i18n'
+import type { Classified } from '../lib/classifySync'
 import type { RunSyncOptions, SyncRunResult, UseRunSyncResult } from '../hooks/useRunSync'
+import { usePagination } from '../hooks/usePagination'
+import { PaginationBar } from './PaginationBar'
 
 interface Props {
   runSync: UseRunSyncResult
@@ -89,31 +92,7 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
             )}
           </p>
 
-          {preview.classified.length > 0 && (
-            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-              <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ textAlign: 'left', borderBottom: '1px solid #dbe4ea' }}>
-                    <th style={{ padding: '4px 8px' }}>{i18n.t('FHIR id')}</th>
-                    <th style={{ padding: '4px 8px' }}>{i18n.t('Antigen')}</th>
-                    <th style={{ padding: '4px 8px' }}>{i18n.t('Classification')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.classified.map((item) => (
-                    <tr key={item.visit.fhirImmunizationId} style={{ borderBottom: '1px solid #f0f3f5' }}>
-                      <td style={{ padding: '4px 8px' }}>{item.visit.fhirImmunizationId}</td>
-                      <td style={{ padding: '4px 8px' }}>{item.visit.antigenName}</td>
-                      <td style={{ padding: '4px 8px' }}>
-                        {kindLabel(item.kind)}
-                        {item.kind === 'unchanged' && item.versionUnknown ? ` (${i18n.t('version unknown -- synced elsewhere')})` : ''}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {preview.classified.length > 0 && <ClassifiedTable classified={preview.classified} />}
 
           {preview.skippedMapping.length > 0 && (
             <div style={{ marginTop: 12 }}>
@@ -134,5 +113,36 @@ export function PreviewPanel({ runSync, buildOptions, onSyncComplete }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+function ClassifiedTable({ classified }: { classified: Classified[] }) {
+  const pagination = usePagination(classified, 20)
+
+  return (
+    <>
+      <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', borderBottom: '1px solid #dbe4ea' }}>
+            <th style={{ padding: '4px 8px' }}>{i18n.t('FHIR id')}</th>
+            <th style={{ padding: '4px 8px' }}>{i18n.t('Antigen')}</th>
+            <th style={{ padding: '4px 8px' }}>{i18n.t('Classification')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pagination.pageItems.map((item) => (
+            <tr key={item.visit.fhirImmunizationId} style={{ borderBottom: '1px solid #f0f3f5' }}>
+              <td style={{ padding: '4px 8px' }}>{item.visit.fhirImmunizationId}</td>
+              <td style={{ padding: '4px 8px' }}>{item.visit.antigenName}</td>
+              <td style={{ padding: '4px 8px' }}>
+                {kindLabel(item.kind)}
+                {item.kind === 'unchanged' && item.versionUnknown ? ` (${i18n.t('version unknown -- synced elsewhere')})` : ''}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <PaginationBar pagination={pagination} />
+    </>
   )
 }

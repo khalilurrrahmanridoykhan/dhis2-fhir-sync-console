@@ -1,13 +1,29 @@
-import { IconChevronRight24, IconArrowLeft16 } from '@dhis2/ui'
-import { ReactNode } from 'react'
+import { IconChevronDown16, IconChevronRight16, IconChevronRight24, IconArrowLeft16 } from '@dhis2/ui'
+import { ReactNode, useState } from 'react'
 import i18n from '../i18n'
 
-export type TabId = 'sync' | 'history' | 'immunization' | 'metadata' | 'settings'
+export type TabId =
+  | 'sync'
+  | 'immunization-d2f'
+  | 'immunization-f2d'
+  | 'metadata-orgunits'
+  | 'metadata-optionsets'
+  | 'metadata-trackedentities'
+  | 'history'
+  | 'sync-settings'
+  | 'settings'
 
 interface NavItem {
   id: TabId
   label: string
 }
+
+interface NavGroup {
+  label: string
+  children: NavItem[]
+}
+
+type NavEntry = ({ kind: 'item' } & NavItem) | ({ kind: 'group' } & NavGroup)
 
 const SIDEBAR_WIDTH = 240
 const COLLAPSED_WIDTH = 48
@@ -49,12 +65,46 @@ export function AppShell({
 }: Props) {
   const inSettings = activeTab === 'settings' && settingsSteps != null
 
-  const mainNav: NavItem[] = [
-    { id: 'sync', label: i18n.t('Sync') },
-    { id: 'history', label: i18n.t('Run history') },
-    { id: 'immunization', label: i18n.t('Immunization gateway') },
-    { id: 'metadata', label: i18n.t('Metadata gateway') },
+  // Manually-toggled groups only -- a group also counts as expanded whenever activeTab is
+  // one of its own children (see isGroupExpanded), so navigating into a child always shows
+  // where you are without needing to separately track/sync that here.
+  const [manuallyExpandedGroups, setManuallyExpandedGroups] = useState<Set<string>>(new Set())
+
+  const mainNav: NavEntry[] = [
+    { kind: 'item', id: 'sync', label: i18n.t('Sync') },
+    {
+      kind: 'group',
+      label: i18n.t('Immunization'),
+      children: [
+        { id: 'immunization-d2f', label: i18n.t('DHIS2 → FHIR') },
+        { id: 'immunization-f2d', label: i18n.t('FHIR → DHIS2') },
+      ],
+    },
+    {
+      kind: 'group',
+      label: i18n.t('Metadata'),
+      children: [
+        { id: 'metadata-orgunits', label: i18n.t('Org units') },
+        { id: 'metadata-optionsets', label: i18n.t('Option sets') },
+        { id: 'metadata-trackedentities', label: i18n.t('Tracked entities') },
+      ],
+    },
+    { kind: 'item', id: 'history', label: i18n.t('Run history') },
+    { kind: 'item', id: 'sync-settings', label: i18n.t('Sync settings') },
   ]
+
+  function isGroupExpanded(group: NavGroup): boolean {
+    return manuallyExpandedGroups.has(group.label) || group.children.some((c) => c.id === activeTab)
+  }
+
+  function toggleGroup(label: string) {
+    setManuallyExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -158,15 +208,27 @@ export function AppShell({
           }}
         >
           <div style={{ flex: 1 }}>
-            {mainNav.map((item) => (
-              <NavButton
-                key={item.id}
-                item={item}
-                active={activeTab === item.id}
-                disabled={!tabsEnabled}
-                onClick={() => onSelectTab(item.id)}
-              />
-            ))}
+            {mainNav.map((entry) =>
+              entry.kind === 'item' ? (
+                <NavButton
+                  key={entry.id}
+                  item={entry}
+                  active={activeTab === entry.id}
+                  disabled={!tabsEnabled}
+                  onClick={() => onSelectTab(entry.id)}
+                />
+              ) : (
+                <NavGroupButton
+                  key={entry.label}
+                  group={entry}
+                  expanded={isGroupExpanded(entry)}
+                  onToggle={() => toggleGroup(entry.label)}
+                  activeTab={activeTab}
+                  disabled={!tabsEnabled}
+                  onSelectTab={onSelectTab}
+                />
+              ),
+            )}
           </div>
 
           <div style={{ borderTop: '1px solid #2c323d', paddingTop: 8, paddingBottom: 16 }}>
@@ -187,7 +249,71 @@ export function AppShell({
   )
 }
 
-function NavButton({ item, active, disabled, onClick }: { item: NavItem; active: boolean; disabled: boolean; onClick: () => void }) {
+function NavGroupButton({
+  group,
+  expanded,
+  onToggle,
+  activeTab,
+  disabled,
+  onSelectTab,
+}: {
+  group: NavGroup
+  expanded: boolean
+  onToggle: () => void
+  activeTab: TabId
+  disabled: boolean
+  onSelectTab: (tab: TabId) => void
+}) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          textAlign: 'left',
+          padding: '12px 20px',
+          border: 'none',
+          borderLeft: '3px solid transparent',
+          backgroundColor: 'transparent',
+          color: '#c6cbd4',
+          fontSize: 14,
+          cursor: 'pointer',
+        }}
+      >
+        {group.label}
+        {expanded ? <IconChevronDown16 /> : <IconChevronRight16 />}
+      </button>
+      {expanded &&
+        group.children.map((child) => (
+          <NavButton
+            key={child.id}
+            item={child}
+            active={activeTab === child.id}
+            disabled={disabled}
+            onClick={() => onSelectTab(child.id)}
+            paddingLeft={40}
+          />
+        ))}
+    </div>
+  )
+}
+
+function NavButton({
+  item,
+  active,
+  disabled,
+  onClick,
+  paddingLeft = 20,
+}: {
+  item: NavItem
+  active: boolean
+  disabled: boolean
+  onClick: () => void
+  paddingLeft?: number
+}) {
   return (
     <button
       onClick={onClick}
@@ -196,7 +322,7 @@ function NavButton({ item, active, disabled, onClick }: { item: NavItem; active:
         display: 'block',
         width: '100%',
         textAlign: 'left',
-        padding: '12px 20px',
+        padding: `12px 20px 12px ${paddingLeft}px`,
         border: 'none',
         borderLeft: active ? '3px solid #2cb0a8' : '3px solid transparent',
         backgroundColor: active ? '#272d38' : 'transparent',

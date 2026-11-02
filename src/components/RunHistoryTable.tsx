@@ -2,6 +2,8 @@ import { Button, CircularLoader } from '@dhis2/ui'
 import { useState } from 'react'
 import i18n from '../i18n'
 import type { UseRunHistoryResult } from '../hooks/useRunHistory'
+import { usePagination } from '../hooks/usePagination'
+import { PaginationBar } from './PaginationBar'
 
 interface Props {
   runHistory: UseRunHistoryResult
@@ -10,6 +12,7 @@ interface Props {
 export function RunHistoryTable({ runHistory }: Props) {
   const [clearing, setClearing] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const pagination = usePagination(runHistory.runs, 20)
 
   if (runHistory.loading) return <CircularLoader small />
 
@@ -46,7 +49,7 @@ export function RunHistoryTable({ runHistory }: Props) {
           </tr>
         </thead>
         <tbody>
-          {runHistory.runs.map((run) => (
+          {pagination.pageItems.map((run) => (
             <tr key={run.timestamp} style={{ borderBottom: '1px solid #f0f3f5' }}>
               <td style={{ padding: '4px 8px' }}>{new Date(run.timestamp).toLocaleString()}</td>
               <td style={{ padding: '4px 8px' }}>{run.fetched}</td>
@@ -59,6 +62,7 @@ export function RunHistoryTable({ runHistory }: Props) {
           ))}
         </tbody>
       </table>
+      <PaginationBar pagination={pagination} />
 
       <div style={{ marginTop: 8 }}>
         {confirming ? (

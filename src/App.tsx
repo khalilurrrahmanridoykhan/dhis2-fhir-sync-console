@@ -2,18 +2,27 @@ import { CircularLoader } from '@dhis2/ui'
 import { useEffect, useRef, useState } from 'react'
 import { AppShell, type TabId } from './components/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { ImmunizationGatewayPanel, MetadataGatewayPanel } from './components/FhirGatewayPanel'
+import {
+  GatewayHistoryTable,
+  ImmunizationDhis2ToFhirPanel,
+  ImmunizationFhirToDhis2Panel,
+  OptionSetsGatewayPanel,
+  OrgUnitsGatewayPanel,
+  TrackedEntitiesGatewayPanel,
+} from './components/FhirGatewayPanel'
 import { PreviewPanel } from './components/PreviewPanel'
 import { RunErrorsPanel } from './components/RunErrorsPanel'
 import { RunHistoryTable } from './components/RunHistoryTable'
 import { RunSyncButton } from './components/RunSyncButton'
 import { SettingsWizard } from './components/SettingsForm'
 import { SyncedCountCard } from './components/SyncedCountCard'
+import { SyncSettingsPanel } from './components/SyncSettingsPanel'
 import { useCurrentUserAuthorities } from './hooks/useCurrentUserAuthorities'
 import { useFhirGateway } from './hooks/useFhirGateway'
 import { useFhirRoute } from './hooks/useFhirRoute'
 import { useRunHistory } from './hooks/useRunHistory'
 import { useRunSync, type RunSyncOptions } from './hooks/useRunSync'
+import { useSchedule } from './hooks/useSchedule'
 import { useSettings } from './hooks/useSettings'
 import { useSettingsWizard } from './hooks/useSettingsWizard'
 import { useSyncedIds } from './hooks/useSyncedIds'
@@ -36,6 +45,7 @@ function AppContent() {
   const runHistory = useRunHistory()
   const runSync = useRunSync()
   const fhirGateway = useFhirGateway(settings.gatewayRouteId)
+  const schedule = useSchedule(settings.gatewayRouteId)
   const wizard = useSettingsWizard(settings, saveSettings)
 
   const settingsComplete = Boolean(settings.routeId && settings.gatewayRouteId && settings.orgUnitId)
@@ -117,24 +127,62 @@ function AppContent() {
         </section>
       )}
 
+      {activeTab === 'immunization-d2f' && (
+        <section>
+          <h2>{i18n.t('Immunization: DHIS2 → FHIR')}</h2>
+          <ImmunizationDhis2ToFhirPanel gateway={fhirGateway} />
+        </section>
+      )}
+
+      {activeTab === 'immunization-f2d' && (
+        <section>
+          <h2>{i18n.t('Immunization: FHIR → DHIS2')}</h2>
+          <ImmunizationFhirToDhis2Panel gateway={fhirGateway} />
+        </section>
+      )}
+
+      {activeTab === 'metadata-orgunits' && (
+        <section>
+          <h2>{i18n.t('Metadata: Organisation units')}</h2>
+          <OrgUnitsGatewayPanel gateway={fhirGateway} />
+        </section>
+      )}
+
+      {activeTab === 'metadata-optionsets' && (
+        <section>
+          <h2>{i18n.t('Metadata: Option sets')}</h2>
+          <OptionSetsGatewayPanel gateway={fhirGateway} />
+        </section>
+      )}
+
+      {activeTab === 'metadata-trackedentities' && (
+        <section>
+          <h2>{i18n.t('Metadata: Tracked entities')}</h2>
+          <TrackedEntitiesGatewayPanel gateway={fhirGateway} />
+        </section>
+      )}
+
       {activeTab === 'history' && (
         <section>
           <h2>{i18n.t('Run history')}</h2>
+
+          <h3 style={{ fontSize: 14 }}>{i18n.t('FHIR-route sync (Sync tab)')}</h3>
           <RunHistoryTable runHistory={runHistory} />
+
+          <h3 style={{ fontSize: 14, marginTop: 24 }}>{i18n.t('Gateway sync (all types)')}</h3>
+          <GatewayHistoryTable gateway={fhirGateway} historyFilter={() => true} showType />
         </section>
       )}
 
-      {activeTab === 'immunization' && (
+      {activeTab === 'sync-settings' && (
         <section>
-          <h2>{i18n.t('Immunization gateway sync')}</h2>
-          <ImmunizationGatewayPanel gateway={fhirGateway} />
-        </section>
-      )}
-
-      {activeTab === 'metadata' && (
-        <section>
-          <h2>{i18n.t('Metadata gateway sync')}</h2>
-          <MetadataGatewayPanel gateway={fhirGateway} />
+          <h2>{i18n.t('Sync settings')}</h2>
+          <p style={{ color: '#6e7a89', fontSize: 13 }}>
+            {i18n.t(
+              'Per sync type: run automatically every N hours, or manual-only (trigger only from its own tab). A one-time run can also be scheduled for a specific date and time regardless of mode.',
+            )}
+          </p>
+          <SyncSettingsPanel schedule={schedule} />
         </section>
       )}
 
